@@ -125,7 +125,7 @@ export default function QuestionEditor({
               </select>
               {examCategories.length === 0 && editingQuestion.exam_code && (
                 <p className="text-xs text-zinc-500 mt-1">
-                  No categories found for exam code "{editingQuestion.exam_code}"
+                  No categories found for exam code &quot;{editingQuestion.exam_code}&quot;
                 </p>
               )}
             </div>

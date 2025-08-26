@@ -3,9 +3,12 @@ import { Question as BaseQuestion, ExamPage as BaseExamPage, ExamCategory as Bas
 
 // Local helper types (DB uses numeric ids for questions often)
 export interface QuestionLike extends Omit<BaseQuestion,'id'> { id: number | string; }
-export type UpdateQuestionPayload = Pick<QuestionLike,'id'|'question'|'answers'|'explanation'|'category'|'level'|'exam_code'|'inactive'>;
-export type ExamPageUpdate = Partial<BaseExamPage> & { id: number };
-export type NewExamCategory = Partial<BaseExamCategory> & { exam_code: string; category_name: string };
+// inactive optional to allow payloads without explicit inactive value
+export interface UpdateQuestionPayload { id: number | string; question: string; answers: Answer[]; explanation: string; category?: string | null; level: string; exam_code: string; inactive?: boolean; }
+// Allow nullable updates for all ExamPage fields, require id
+type ExamPageNullableUpdate = { [K in keyof BaseExamPage]?: BaseExamPage[K] | null };
+export type ExamPageUpdate = { id: number } & ExamPageNullableUpdate;
+export type NewExamCategory = Partial<{ [K in keyof BaseExamCategory]: BaseExamCategory[K] | null }> & { exam_code: string; category_name: string };
 export type InsertQuestionPayload = Partial<QuestionLike> & { question: string; answers: Answer[]; explanation: string; level: string; exam_code: string; category?: string | null };
 export type CreateExamPageInput = Partial<BaseExamPage> & { exam_code: string; exam_name: string };
 

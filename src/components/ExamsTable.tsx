@@ -269,7 +269,7 @@ export default function ExamsTable({ examPages, loading, onUpdate }: ExamsTableP
                           <textarea title="Google Snippet (seo_google_snippet)" value={draft.seo_google_snippet || ''} onChange={e=>updateField('seo_google_snippet', e.target.value)} rows={2} className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" />
                         </div>
                         <div>
-                          <label className="block text-zinc-400 mb-1">Estimated Duration (estimated_duration)"</label>
+                          <label className="block text-zinc-400 mb-1">Estimated Duration (estimated_duration)&quot;</label>
                           <input title="Estimated Duration (estimated_duration)" type="number" value={draft.estimated_duration ?? ''} onChange={e=>updateField('estimated_duration', e.target.value===''? null : Number(e.target.value))} className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" />
                         </div>
                       </div>

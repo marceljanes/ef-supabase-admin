@@ -40,7 +40,7 @@ export default function QuestionsList({
 
   // Logic to display limited page numbers with ellipses
   let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+  const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
   if (endPage - startPage + 1 < maxVisiblePages) {
     startPage = Math.max(1, endPage - maxVisiblePages + 1);
@@ -114,7 +114,7 @@ export default function QuestionsList({
                   <td className={`px-2 py-4 relative ${recent ? 'border-l-2 border-l-green-500' : ''}`}>
                     {recent && <span className="absolute left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-green-400" />}
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-zinc-300">{question.id?.substring(0, 8)}...</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-zinc-300">{question.id?.substring(0, 8)}&hellip;</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-zinc-300">{question.exam_code}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-zinc-300">{question.category}</td>
                   <td className="px-4 py-4 text-sm text-zinc-300 max-w-sm truncate">
