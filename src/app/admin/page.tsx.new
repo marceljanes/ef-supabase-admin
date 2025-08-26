@@ -1,0 +1,545 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { dbService } from '@/lib/supabase';
+import { Question } from '@/types/database';
+import { DashboardStats, DeletingState } from '@/types/admin';
+import StatCard from '@/components/StatCard';
+import QuickActionCard from '@/components/QuickActionCard';
+import QuestionsList from '@/components/QuestionsList';
+import QuestionEditor from '@/components/QuestionEditor';
+import Filters from '@/components/Filters';
+import { 
+  BookOpen, 
+  HelpCircle, 
+  FolderOpen, 
+  TrendingUp,
+  Activity,
+  Star,
+  Eye,
+  Plus,
+  Filter,
+  Search
+} from 'lucide-react';
+
+export default function AdminDashboard() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedExamCode, setSelectedExamCode] = useState<string>('');
+  const [availableExamCodes, setAvailableExamCodes] = useState<string[]>([]);
+  const [searchText, setSearchText] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [examCategories, setExamCategories] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState<DeletingState>({});
+  
+  // Client-side filtering and pagination
+  const questionsPerPage = 20;
+  let filteredQuestions = selectedExamCode === '' 
+    ? [] 
+    : allQuestions.filter(q => q.exam_code === selectedExamCode);
+  
+  // Apply category filter if a specific category is selected
+  if (selectedCategory !== '') {
+    filteredQuestions = filteredQuestions.filter(q => q.category === selectedCategory);
+  }
+  
+  // Apply text search filter if search text is provided
+  if (searchText.trim() !== '') {
+    filteredQuestions = filteredQuestions.filter(q => 
+      q.question?.toLowerCase().includes(searchText.toLowerCase()) ||
+      (q.answers && q.answers.some(answer => 
+        answer.text?.toLowerCase().includes(searchText.toLowerCase())
+      )) ||
+      (q.explanation && q.explanation.toLowerCase().includes(searchText.toLowerCase()))
+    );
+  }
+
+  useEffect(() => {
+    loadDashboardStats();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'questions') {
+      setCurrentPage(1);
+      setSelectedExamCode('');
+      setAllQuestions([]); // Clear questions
+      loadExamCodes();
+    }
+  }, [activeTab]);
+
+  const loadExamCodes = async () => {
+    try {
+      console.log('Loading exam codes separately...');
+      const examCodes = await dbService.getExamCodes();
+      console.log('Exam codes loaded separately:', examCodes);
+      setAvailableExamCodes(examCodes);
+    } catch (error) {
+      console.error('Error loading exam codes:', error);
+    }
+  };
+
+  const loadDashboardStats = async () => {
+    try {
+      setError(null);
+      console.log('Loading dashboard stats...');
+      const data = await dbService.getDashboardStats();
+      console.log('Stats loaded successfully:', data);
+      setStats(data);
+    } catch (error) {
+      console.error('Error loading dashboard stats:', error);
+      setError('Failed to load dashboard data. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadQuestionsForExamCode = async (examCode: string) => {
+    try {
+      setQuestionsLoading(true);
+      console.log('Loading questions for exam code:', examCode);
+      
+      // Load questions for specific exam code directly
+      const questions = await dbService.getQuestionsByExamCode(examCode);
+      console.log('Questions loaded for exam code:', examCode, questions.length);
+      setAllQuestions(questions);
+      
+      // Extract unique categories from loaded questions
+      const categories = [...new Set(questions
+        .map((q: any) => q.category)
+        .filter((category: any) => category && category.trim() !== '')
+      )].sort() as string[];
+      console.log('Available categories for', examCode, ':', categories);
+      setAvailableCategories(categories);
+      setSelectedCategory(''); // Reset category filter
+    } catch (error) {
+      console.error('Error loading questions:', error);
+      setError('Failed to load questions data. Please check your connection.');
+    } finally {
+      setQuestionsLoading(false);
+    }
+  };
+
+  const openQuestionEditor = (question: Question) => {
+    setEditingQuestion({ ...question }); // Create a copy for editing
+    // Load categories for the exam code
+    loadExamCategories(question.exam_code || '');
+  };
+
+  const loadExamCategories = async (examCode: string) => {
+    if (!examCode) return;
+    
+    try {
+      console.log('Loading categories for exam code:', examCode);
+      const categories = await dbService.getCategoriesByExamCode(examCode);
+      console.log('Categories loaded:', categories);
+      setExamCategories(categories);
+    } catch (error) {
+      console.error('Error loading exam categories:', error);
+      setExamCategories([]);
+    }
+  };
+
+  const closeQuestionEditor = () => {
+    setEditingQuestion(null);
+  };
+
+  const saveQuestion = async (question: Question) => {
+    try {
+      setSaving(true);
+      console.log('Saving question:', question);
+      
+      // Call the backend to update the question
+      await dbService.updateQuestion(question);
+      
+      // Update the local state
+      setAllQuestions(prev => 
+        prev.map(q => q.id === question.id ? question : q)
+      );
+      
+      console.log('Question saved successfully');
+      closeQuestionEditor();
+    } catch (error) {
+      console.error('Error saving question:', error);
+      setError('Failed to save question. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteQuestion = async (questionId: string) => {
+    if (!confirm('Are you sure you want to delete this question? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      setDeleting(prev => ({ ...prev, [questionId]: true }));
+      console.log('Deleting question:', questionId);
+      
+      // Call the backend to delete the question
+      await dbService.deleteQuestion(questionId);
+      
+      // Update the local state
+      setAllQuestions(prev => prev.filter(q => q.id !== questionId));
+      
+      console.log('Question deleted successfully');
+      if (editingQuestion?.id === questionId) {
+        closeQuestionEditor();
+      }
+    } catch (error) {
+      console.error('Error deleting question:', error);
+      setError('Failed to delete question. Please try again.');
+    } finally {
+      setDeleting(prev => ({ ...prev, [questionId]: false }));
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-zinc-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border border-zinc-600 border-t-white mx-auto mb-4"></div>
+          <p className="text-sm text-zinc-400">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-zinc-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="bg-zinc-900 border border-red-700 rounded-lg p-6 max-w-md">
+            <h2 className="text-lg font-medium text-red-400 mb-2">Connection Error</h2>
+            <p className="text-sm text-red-300 mb-4">{error}</p>
+            <button 
+              onClick={loadDashboardStats}
+              className="bg-red-600 hover:bg-red-700 text-white text-sm px-4 py-2 rounded-md transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-zinc-800">
+      {/* Header */}
+      <header className="bg-zinc-900 border-b border-zinc-700">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-xl font-medium text-white">EF Admin Dashboard</h1>
+              <p className="text-sm text-zinc-400">Exam Management System</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button className="bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded-md transition-colors flex items-center space-x-2">
+                <Plus className="h-4 w-4" />
+                <span>Insert</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Navigation Tabs */}
+      <div className="bg-zinc-900 border-b border-zinc-700">
+        <div className="max-w-7xl mx-auto px-6">
+          <nav className="flex space-x-6">
+            {[
+              { id: 'overview', label: 'Dashboard', icon: <TrendingUp className="h-4 w-4" /> },
+              { id: 'questions', label: 'Questions', icon: <HelpCircle className="h-4 w-4" /> },
+              { id: 'exams', label: 'Exams', icon: <BookOpen className="h-4 w-4" /> },
+              { id: 'categories', label: 'Categories', icon: <FolderOpen className="h-4 w-4" /> },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-green-500 text-green-500'
+                    : 'border-transparent text-zinc-400 hover:text-zinc-300 hover:border-zinc-400'
+                }`}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Dashboard Overview Tab */}
+        {activeTab === 'overview' && stats && (
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <StatCard
+                title="Total Exams"
+                value={stats.totalExams}
+                icon={BookOpen}
+                change={"+2 this week"}
+                trend="up"
+              />
+              <StatCard
+                title="Total Questions"
+                value={stats.totalQuestions}
+                icon={HelpCircle}
+                change={"+15 this week"}
+                trend="up"
+              />
+              <StatCard
+                title="Active Exams"
+                value={stats.activeExams}
+                icon={Activity}
+                change={"1 activated today"}
+                trend="up"
+              />
+              <StatCard
+                title="Categories"
+                value={stats.totalCategories}
+                icon={FolderOpen}
+                change={"No change"}
+                trend="neutral"
+              />
+              <StatCard
+                title="Featured Exams"
+                value={stats.featuredExams}
+                icon={Star}
+                change={"No change"}
+                trend="neutral"
+              />
+              <StatCard
+                title="User Sessions"
+                value={124}
+                icon={Eye}
+                change={"+12% this week"}
+                trend="up"
+              />
+            </div>
+
+            {/* Quick Actions */}
+            <div>
+              <h2 className="text-lg font-medium text-white mb-4">Quick Actions</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <QuickActionCard
+                  icon={Plus}
+                  title="Add Exam"
+                  description="Create a new exam from scratch"
+                  onClick={() => {}}
+                  color="bg-green-700"
+                />
+                <QuickActionCard
+                  icon={Plus}
+                  title="Add Question"
+                  description="Create a new exam question"
+                  onClick={() => {}}
+                  color="bg-blue-700"
+                />
+                <QuickActionCard
+                  icon={Search}
+                  title="Search Content"
+                  description="Find specific exams, questions, or data"
+                  onClick={() => {}}
+                  color="bg-zinc-700"
+                />
+                <QuickActionCard
+                  icon={Filter}
+                  title="Bulk Operations"
+                  description="Perform bulk updates and maintenance"
+                  onClick={() => {}}
+                  color="bg-zinc-700"
+                />
+              </div>
+            </div>
+
+            {/* Recent Activity */}
+            <div>
+              <h2 className="text-lg font-medium text-white mb-4">Recent Activity</h2>
+              <div className="bg-zinc-900 border border-zinc-700 rounded-lg">
+                <div className="p-4">
+                  <div className="space-y-3">
+                    {[
+                      {
+                        action: 'Dashboard loaded successfully',
+                        target: `${stats?.totalExams || 0} exams, ${stats?.totalQuestions || 0} questions`,
+                        time: 'Just now',
+                        type: 'success'
+                      },
+                      {
+                        action: 'System ready',
+                        target: 'All services operational',
+                        time: '1 minute ago',
+                        type: 'info'
+                      }
+                    ].map((activity, index) => (
+                      <div key={index} className="flex items-center justify-between py-2 border-b border-zinc-700 last:border-b-0">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-1.5 h-1.5 rounded-full ${
+                            activity.type === 'success' ? 'bg-green-500' :
+                            activity.type === 'info' ? 'bg-blue-500' :
+                            activity.type === 'warning' ? 'bg-yellow-500' : 'bg-zinc-500'
+                          }`}></div>
+                          <div>
+                            <p className="text-sm text-white">{activity.action}</p>
+                            <p className="text-xs text-zinc-400">{activity.target}</p>
+                          </div>
+                        </div>
+                        <div className="text-xs text-zinc-500">{activity.time}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Questions Tab */}
+        {activeTab === 'questions' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-medium text-white">Questions Management</h2>
+                <p className="text-sm text-zinc-400">Filter by active exam codes and view questions</p>
+              </div>
+              <button 
+                className="bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded-md transition-colors flex items-center space-x-2"
+                onClick={() => openQuestionEditor({ 
+                  id: '', 
+                  question: '',
+                  exam_code: '',
+                  answers: []
+                })}
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Question</span>
+              </button>
+            </div>
+
+            {/* Filter Buttons for exam codes */}
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Filter className="h-4 w-4 text-zinc-400" />
+                <span className="text-sm text-zinc-400">Filter by Exam Code:</span>
+                <button
+                  onClick={loadExamCodes}
+                  className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded transition-colors"
+                  title="Refresh exam codes"
+                >
+                  ↻
+                </button>
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                {availableExamCodes.map((examCode) => {
+                  const examCodeCount = allQuestions.filter(q => q.exam_code === examCode).length;
+                  return (
+                    <button
+                      key={examCode}
+                      onClick={() => {
+                        setSelectedExamCode(examCode);
+                        setCurrentPage(1);
+                        setSearchText('');
+                        setSelectedCategory('');
+                        loadQuestionsForExamCode(examCode);
+                      }}
+                      className={`px-3 py-2 text-sm rounded-md transition-colors ${
+                        selectedExamCode === examCode
+                          ? 'bg-green-600 text-white'
+                          : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                      }`}
+                    >
+                      {examCode} {selectedExamCode === examCode ? `(${examCodeCount})` : ''}
+                    </button>
+                  );
+                })}
+
+                {availableExamCodes.length === 0 && (
+                  <span className="text-xs text-zinc-500 px-3 py-2">Loading active exam codes...</span>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Component */}
+            {selectedExamCode && (
+              <Filters 
+                examCodes={availableExamCodes}
+                categories={availableCategories}
+                selectedExamCode={selectedExamCode}
+                selectedCategory={selectedCategory}
+                searchQuery={searchText}
+                onExamCodeChange={(examCode) => {
+                  setSelectedExamCode(examCode);
+                  setCurrentPage(1);
+                  loadQuestionsForExamCode(examCode);
+                }}
+                onCategoryChange={(category) => {
+                  setSelectedCategory(category);
+                  setCurrentPage(1);
+                }}
+                onSearchChange={(query) => {
+                  setSearchText(query);
+                  setCurrentPage(1);
+                }}
+              />
+            )}
+            
+            {/* Questions List Component */}
+            {selectedExamCode && (
+              <QuestionsList
+                questions={allQuestions}
+                filteredQuestions={filteredQuestions}
+                currentPage={currentPage}
+                questionsPerPage={questionsPerPage}
+                onEdit={openQuestionEditor}
+                onDelete={deleteQuestion}
+                onPageChange={setCurrentPage}
+                loading={questionsLoading}
+                deleting={deleting}
+              />
+            )}
+
+            {/* Question Editor Modal */}
+            {editingQuestion && (
+              <QuestionEditor
+                question={editingQuestion}
+                examCategories={examCategories}
+                onSave={saveQuestion}
+                onClose={closeQuestionEditor}
+                onLoadCategories={loadExamCategories}
+                saving={saving}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Exams Tab Placeholder */}
+        {activeTab === 'exams' && (
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-8 text-center">
+            <h2 className="text-xl font-medium text-white mb-2">Exams Management</h2>
+            <p className="text-zinc-400">This feature is coming soon...</p>
+          </div>
+        )}
+
+        {/* Categories Tab Placeholder */}
+        {activeTab === 'categories' && (
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-8 text-center">
+            <h2 className="text-xl font-medium text-white mb-2">Categories Management</h2>
+            <p className="text-zinc-400">This feature is coming soon...</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
