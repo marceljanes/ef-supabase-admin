@@ -1,4 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
+import { Question as BaseQuestion, ExamPage as BaseExamPage, ExamCategory as BaseExamCategory, Answer } from '@/types/database';
+
+// Local helper types (DB uses numeric ids for questions often)
+export interface QuestionLike extends Omit<BaseQuestion,'id'> { id: number | string; }
+export type UpdateQuestionPayload = Pick<QuestionLike,'id'|'question'|'answers'|'explanation'|'category'|'level'|'exam_code'|'inactive'>;
+export type ExamPageUpdate = Partial<BaseExamPage> & { id: number };
+export type NewExamCategory = Partial<BaseExamCategory> & { exam_code: string; category_name: string };
+export type InsertQuestionPayload = Partial<QuestionLike> & { question: string; answers: Answer[]; explanation: string; level: string; exam_code: string; category?: string | null };
+export type CreateExamPageInput = Partial<BaseExamPage> & { exam_code: string; exam_name: string };
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -289,7 +298,7 @@ export const dbService = {
   },
 
   // Update a question
-  async updateQuestion(question: any) {
+  async updateQuestion(question: UpdateQuestionPayload) {
     try {
       console.log('Updating question:', question.id);
       const nowIso = new Date().toISOString();
@@ -386,7 +395,7 @@ export const dbService = {
   },
 
   // New: update single exam_page row
-  async updateExamPage(page: Partial<any> & { id: number }) {
+  async updateExamPage(page: ExamPageUpdate) {
     try {
       if (!page || typeof page.id === 'undefined') {
         throw new Error('updateExamPage requires an object with an id');
@@ -423,7 +432,7 @@ export const dbService = {
       throw e;
     }
   },
-  async createExamCategory(category: any) {
+  async createExamCategory(category: NewExamCategory) {
     try {
       const { data, error } = await supabase
         .from('exam_categories')
@@ -503,7 +512,7 @@ export const dbService = {
       return [];
     }
   },
-  async insertQuestion(question: any) {
+  async insertQuestion(question: InsertQuestionPayload) {
     try {
       // Ensure created_at is always set on creation (single or bulk loop usage)
       const payload = { ...question };
@@ -556,7 +565,7 @@ export const dbService = {
   // New: fetch 10 newest created and 10 newest updated questions
   async getRecentQuestionsActivity() {
     try {
-      let created: any[] = [];
+      let created: QuestionLike[] = [];
       // Try created_at first
       try {
         const { data, error } = await supabase
@@ -566,8 +575,9 @@ export const dbService = {
           .limit(10);
         if (error) throw error;
         created = data || [];
-      } catch (err: any) {
-        if (String(err.message || err).toLowerCase().includes('created_at')) {
+      } catch (err: unknown) {
+        const msg = typeof err === 'object' && err && 'message' in err ? String((err as any).message) : String(err);
+        if (msg.toLowerCase().includes('created_at')) {
           console.warn('created_at column missing on questions – falling back to id desc');
           const { data: fallback, error: fbErr } = await supabase
             .from('questions')
@@ -576,12 +586,12 @@ export const dbService = {
             .limit(10);
           if (!fbErr) created = fallback || []; else console.warn('fallback id query failed', fbErr?.message);
         } else {
-          console.warn('Unexpected error fetching created questions', err);
+          console.warn('Unexpected error fetching created questions', msg);
         }
       }
 
       // Recently updated (where updated_at not null) ordered by updated_at desc
-      let updated: any[] = [];
+      let updated: QuestionLike[] = [];
       try {
         const { data: upd, error: updErr } = await supabase
           .from('questions')
@@ -592,7 +602,7 @@ export const dbService = {
         if (updErr) throw updErr;
         updated = upd || [];
       } catch (e) {
-        console.warn('Error fetching updated questions', (e as any)?.message);
+        console.warn('Error fetching updated questions', (e as Error)?.message);
       }
 
       return { created, updated };
@@ -603,7 +613,7 @@ export const dbService = {
   },
 
   // New: create exam_page
-  async createExamPage(payload: Partial<any>) {
+  async createExamPage(payload: CreateExamPageInput) {
     try {
       if(!payload.exam_code || !payload.exam_name) throw new Error('exam_code & exam_name required');
       const defaults = {
