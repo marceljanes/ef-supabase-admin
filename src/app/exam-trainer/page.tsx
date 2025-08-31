@@ -29,7 +29,7 @@ export default function ExamTrainerPage() {
         <button onClick={()=>setActiveTab('about')} className={`px-4 py-2 -mb-px border-b-2 ${activeTab==='about' ? 'border-green-600 text-green-600' : 'border-transparent text-zinc-500 hover:text-zinc-800 exam-dark:hover:text-zinc-200'}`}>Info</button>
       </div>
       {activeTab==='trainer' ? (
-        <ExamTrainer localTheme={theme} />
+        <ExamTrainer theme={theme} />
       ) : (
         <div className="prose prose-sm max-w-none text-zinc-700 exam-dark:text-zinc-300">
           <h2>About This Trainer</h2>
