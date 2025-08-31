@@ -170,7 +170,7 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
     if(!questionsJson.trim()) return;
     setParsing(true); setParseResults([]); setSanitized(false); setQuestionCategories({});
     try {
-      let raw = questionsJson.trim();
+      const raw = questionsJson.trim();
       // Auto-sanitize common escape artifacts (e.g. from markdown export) like \[ \] \_ "exam\_code"
       const cleaned = raw
         // remove backslash before square brackets
@@ -681,8 +681,8 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
             </div>
             <ol className="list-decimal list-inside space-y-2 text-zinc-300">
               <li><span className="font-medium text-white">Select & Configure:</span> Choose Exam + Category and set generation parameters (quantity, difficulty, similarity, answer counts, correct answers, etc.).</li>
-              <li><span className="font-medium text-white">Copy Prompt:</span> Click "Copy Prompt" and send it unchanged to the LLM (no markdown wrapping, keep JSON skeleton intact).</li>
-              <li><span className="font-medium text-white">Paste & Validate JSON:</span> Paste the raw JSON response, click "Validate JSON" and resolve any errors (icons, wrong counts, missing HTML in explanation, etc.).</li>
+              <li><span className="font-medium text-white">Copy Prompt:</span> Click &quot;Copy Prompt&quot; and send it unchanged to the LLM (no markdown wrapping, keep JSON skeleton intact).</li>
+              <li><span className="font-medium text-white">Paste & Validate JSON:</span> Paste the raw JSON response, click &quot;Validate JSON&quot; and resolve any errors (icons, wrong counts, missing HTML in explanation, etc.).</li>
               <li><span className="font-medium text-white">Save:</span> Save all valid questions in bulk or individually after previewing answers & explanation.</li>
             </ol>
             <div className="text-[11px] text-zinc-500">Notes: No icons / ticks / prefixes in answers. Exactly the configured number of correct answers. Explanations must use HTML tags. Category & exam_code must match.</div>
