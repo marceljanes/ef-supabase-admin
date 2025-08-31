@@ -12,11 +12,21 @@ interface QuestionsListProps {
   onPageChange: (page: number) => void;
   loading: boolean;
   deleting: { [key: string]: boolean };
+  categories: string[];
 }
 
-// 10 minute recent window (same as update screen)
-const RECENT_MS = 10 * 60 * 1000;
-const isRecent = (ts?: string) => ts ? (Date.now() - new Date(ts).getTime()) < RECENT_MS : false;
+// 6 month recent window for updated questions
+const RECENT_MS = 6 * 30 * 24 * 60 * 60 * 1000;
+const isRecent = (updated_at?: string, created_at?: string) => {
+  if (!updated_at || !created_at) return false;
+  
+  const updatedTime = new Date(updated_at).getTime();
+  const createdTime = new Date(created_at).getTime();
+  const now = Date.now();
+  
+  // Must be updated within last 6 months AND updated_at must be newer than created_at
+  return (now - updatedTime) < RECENT_MS && updatedTime > createdTime;
+};
 
 export default function QuestionsList({
   questions,
@@ -27,7 +37,8 @@ export default function QuestionsList({
   onDelete,
   onPageChange,
   loading,
-  deleting
+  deleting,
+  categories
 }: QuestionsListProps) {
   // Calculate pagination
   const indexOfLastQuestion = currentPage * questionsPerPage;
@@ -104,7 +115,7 @@ export default function QuestionsList({
               </tr>
             ) : (
               currentQuestions.map((question) => {
-                const recent = isRecent(question.updated_at);
+                const recent = isRecent(question.updated_at, question.created_at);
                 return (
                 <tr
                   key={question.id}
@@ -116,7 +127,18 @@ export default function QuestionsList({
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-zinc-300">{question.id?.substring(0, 8)}&hellip;</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-zinc-300">{question.exam_code}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-zinc-300">{question.category}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm">
+                    {question.category && !categories.includes(question.category) ? (
+                      <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                          <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                        </svg>
+                        {question.category}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-300">{question.category || 'N/A'}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-4 text-sm text-zinc-300 max-w-sm truncate">
                     <span className="inline-flex items-center gap-2">
                       {question.question}

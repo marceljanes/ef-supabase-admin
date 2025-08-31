@@ -14,6 +14,8 @@ import ExamCategoriesManager from '@/components/ExamCategoriesManager';
 import InsertQuestionModal from '@/components/InsertQuestionModal';
 import QuestionPromptBuilder from '@/components/QuestionPromptBuilder';
 import UpdateQuestions from '@/components/UpdateQuestions';
+import ExamTrainer from '@/components/ExamTrainer';
+import PMI from '@/components/PMI';
 import { 
   BookOpen, 
   HelpCircle, 
@@ -23,7 +25,11 @@ import {
   Star,
   Eye,
   Plus,
-  Filter
+  Filter,
+  Sun,
+  Moon,
+  Users,
+  Kanban
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -51,6 +57,7 @@ export default function AdminDashboard() {
   const [recentUpdated, setRecentUpdated] = useState<any[]>([]);
   const [flash, setFlash] = useState<{ type: 'success' | 'error'; message: string; ts: number } | null>(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [trainerTheme, setTrainerTheme] = useState<'dark'|'light'>('dark');
   
   // Client-side filtering and pagination
   const questionsPerPage = 20;
@@ -152,6 +159,9 @@ export default function AdminDashboard() {
       console.log('Available categories for', examCode, ':', categories);
       setAvailableCategories(categories);
       setSelectedCategory(''); // Reset category filter
+
+      // Load valid categories from exam_categories table for validation
+      await loadExamCategories(examCode);
     } catch (error) {
       console.error('Error loading questions:', error);
       setError('Failed to load questions data. Please check your connection.');
@@ -328,7 +338,13 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-800">
+    <div className={`min-h-screen transition-colors duration-500 ${
+      activeTab==='trainer'
+        ? (trainerTheme==='light'
+            ? 'bg-gradient-to-br from-zinc-100 via-white to-zinc-200'
+            : 'bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-800')
+        : 'bg-zinc-800'
+    }`}>
       {/* Header */}
       <header className="bg-zinc-900 border-b border-zinc-700">
         {/* Flash Message */}
@@ -339,9 +355,24 @@ export default function AdminDashboard() {
         )}
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-xl font-medium text-white">EF Admin Dashboard</h1>
-              <p className="text-sm text-zinc-400">Exam Management System</p>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <svg width="40" height="40" viewBox="0 0 48 48" className="drop-shadow" aria-hidden="true">
+                  <defs>
+                    <linearGradient id="efGrad" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#34d399" />
+                      <stop offset="55%" stopColor="#059669" />
+                      <stop offset="100%" stopColor="#0f766e" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M23.7 3.6c1-.6 2.3-.6 3.3 0l13.6 7.9c1 .6 1.7 1.7 1.7 2.9v15.8c0 1.2-.6 2.3-1.7 2.9L27 41c-1 .6-2.3.6-3.3 0l-13.6-7.9c-1-.6-1.7-1.7-1.7-2.9V14.4c0-1.2.6-2.3 1.7-2.9L23.7 3.6Z" fill="url(#efGrad)" />
+                  <path d="M17 30.5h14M17 24h14M17 17.5h14" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold tracking-tight bg-gradient-to-r from-emerald-300 via-emerald-400 to-teal-300 bg-clip-text text-transparent">Exam Forge</h1>
+                <p className="text-xs text-zinc-500 uppercase tracking-wider">Admin Console</p>
+              </div>
             </div>
             {/* Removed green create questions button */}
           </div>
@@ -357,8 +388,10 @@ export default function AdminDashboard() {
               { id: 'questions', label: 'Questions', icon: <HelpCircle className="h-4 w-4" /> },
               { id: 'exams', label: 'Exams', icon: <BookOpen className="h-4 w-4" /> },
               { id: 'categories', label: 'Categories', icon: <FolderOpen className="h-4 w-4" /> },
+              { id: 'pmi', label: 'PMI', icon: <Kanban className="h-4 w-4" /> },
               { id: 'create', label: 'Create Questions', icon: null },
-              { id: 'update', label: 'Update Questions', icon: null }
+              { id: 'update', label: 'Update Questions', icon: null },
+              { id: 'trainer', label: 'Exam Trainer', icon: <Activity className="h-4 w-4" /> }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -420,19 +453,19 @@ export default function AdminDashboard() {
                 color="bg-purple-900/30"
               />
               <StatCard
-                title="Featured Exams"
-                value={stats.featuredExams}
+                title="Questions ohne Category"
+                value={stats.questionsWithoutCategory}
                 icon={Star}
-                change={"No change"}
-                trend="neutral"
+                change={stats.questionsWithoutCategory === 0 ? "Alle haben Category" : "Need attention"}
+                trend={stats.questionsWithoutCategory === 0 ? "up" : "down"}
                 color="bg-yellow-900/30"
               />
               <StatCard
-                title="User Sessions"
-                value={124}
+                title="Recently Updated Questions"
+                value={stats.recentlyUpdatedQuestions}
                 icon={Eye}
-                change={"+12% this week"}
-                trend="up"
+                change={stats.recentlyUpdatedQuestions > 0 ? `${stats.recentlyUpdatedQuestions} in last 6 months` : "No recent updates"}
+                trend={stats.recentlyUpdatedQuestions > 0 ? "up" : "neutral"}
                 color="bg-teal-900/30"
               />
             </div>
@@ -615,6 +648,7 @@ export default function AdminDashboard() {
                 onPageChange={setCurrentPage}
                 loading={questionsLoading}
                 deleting={deleting}
+                categories={examCategories}
               />
             )}
 
@@ -632,14 +666,19 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Exams Tab Placeholder */}
+        {/* Exams Tab */}
         {activeTab === 'exams' && (
           <ExamsTable examPages={examPages} loading={examPagesLoading} onUpdate={updateExamPage} />
         )}
 
-        {/* Categories Tab Placeholder */}
+        {/* Categories Tab */}
         {activeTab === 'categories' && (
           <ExamCategoriesManager />
+        )}
+
+        {/* PMI Tab */}
+        {activeTab === 'pmi' && (
+          <PMI />
         )}
 
         {/* Create Questions Tab */}
@@ -676,6 +715,26 @@ export default function AdminDashboard() {
           <div className="space-y-8 max-w-7xl">
             <h2 className="text-xl font-medium text-white">Update Existing Questions</h2>
             <UpdateQuestions />
+          </div>
+        )}
+
+        {activeTab === 'trainer' && (
+          <div className={`relative grid grid-cols-1 lg:grid-cols-12 gap-6 transition-colors -mx-6 px-6 py-8 rounded-xl overflow-hidden ${trainerTheme==='light' ? 'bg-white/60 ring-1 ring-zinc-300/50 backdrop-blur-sm shadow-sm' : 'bg-zinc-900/60 ring-1 ring-zinc-700/60 backdrop-blur-sm'} before:absolute before:inset-0 before:pointer-events-none before:bg-[radial-gradient(ellipse_at_top,rgba(34,197,94,0.15),transparent_70%)]`}> 
+            <div className="lg:col-span-12 flex justify-between items-center mb-4 relative z-10">
+              <h2 className={`text-lg font-semibold tracking-tight ${trainerTheme==='light' ? 'text-zinc-800' : 'text-white'}`}>Exam Trainer</h2>
+              <button
+                onClick={()=>setTrainerTheme(t=>t==='dark'?'light':'dark')}
+                aria-label="Toggle theme"
+                className={`h-9 w-9 inline-flex items-center justify-center rounded-md border transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/60 focus:ring-offset-0 ${trainerTheme==='light' ? 'bg-white/80 hover:bg-white text-emerald-600 border-zinc-300' : 'bg-zinc-800 hover:bg-zinc-700 text-emerald-300 border-zinc-600'}`}
+              >
+                {trainerTheme==='light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              </button>
+            </div>
+            <div className={`lg:col-span-12 relative z-10 ${trainerTheme==='light' ? 'text-zinc-800' : ''}`}>
+              <ExamTrainer theme={trainerTheme} />
+            </div>
+            {/* Decorative grid overlay */}
+            <div className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-overlay [background-image:linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] [background-size:40px_40px]" />
           </div>
         )}
 

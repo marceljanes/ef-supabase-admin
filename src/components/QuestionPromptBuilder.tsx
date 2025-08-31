@@ -28,6 +28,12 @@ export default function QuestionPromptBuilder() {
   const [savingBulk, setSavingBulk] = useState(false);
   const [sanitized, setSanitized] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [customRole, setCustomRole] = useState('');
+  const [roleScope, setRoleScope] = useState<'all'|'some'>('all');
+  const [similarQuestions, setSimilarQuestions] = useState('');
+  const [useSimilarQuestions, setUseSimilarQuestions] = useState(false);
+  const [questionCategories, setQuestionCategories] = useState<{[key: number]: string}>({});
 
   useEffect(()=>{ (async ()=>{
     try {
@@ -65,16 +71,47 @@ export default function QuestionPromptBuilder() {
     : 'very high similarity (expert level, nuanced differences)';
 
   const prompt = useMemo(()=>{
-    if(!selectedExamObj || !selectedCategory) return 'Select exam & category to build the master prompt.';
+    if(!selectedExamObj) return 'Select exam to build the master prompt.';
+    
+    // Build scenario template instructions if templates are selected
+    let scenarioInstructions = '';
+    if (selectedRoles.length > 0) {
+      const templateList = selectedRoles.map(template => `"${template}"`).join(', ');
+      scenarioInstructions = roleScope === 'all' 
+        ? `- Scenario Templates: Frame ALL questions using these scenario starters: ${templateList}. Use these templates to create realistic client workshop and meeting scenarios. Mix the templates across questions to provide variety.`
+        : `- Scenario Templates: For SOME questions (mix with regular questions), use these scenario starters: ${templateList}. Create realistic client workshop and meeting scenarios using these templates.`;
+    }
+
+    // Combine regular context with similar questions if enabled
+    let combinedContext = context || '';
+    
+    if (useSimilarQuestions && similarQuestions.trim()) {
+      const similarQuestionsSection = `--- Similar Questions for Inspiration (COPYRIGHT PROTECTED) ---
+⚠️ COPYRIGHT WARNING:
+• The following questions are COPYRIGHT PROTECTED and provided ONLY for tonality, style, and essence inspiration
+• You MUST NOT replicate, copy, or create near-identical versions of these questions
+• Use them ONLY to understand: writing style, complexity level, domain focus, and question approach
+• Create completely NEW questions that are conceptually different but capture similar professional tone and essence
+• Your questions must be original content that stands alone without resembling the provided examples
+• The structure/format is already defined in the prompt requirements - use only the content essence and tonality as inspiration
+• Focus on different topics, scenarios, and technical aspects while maintaining similar quality standards
+
+${similarQuestions.trim()}`;
+      
+      combinedContext = combinedContext 
+        ? `${combinedContext}\n\n${similarQuestionsSection}`
+        : similarQuestionsSection;
+    }
+
     return `You are an expert in ${selectedExamObj.vendor || ''} ${selectedExamObj.exam_code} with many years of hands-on experience.
-Goal: Generate ${questionCount} unique, high-quality multiple-choice questions for the ${selectedCategory} category of the ${selectedExamObj.exam_code} certification exam.
+Goal: Generate ${questionCount} unique, high-quality multiple-choice questions for the ${selectedExamObj.exam_code} certification exam.
 
 Requirements:
 - Difficulty: ${difficulty === 'Mixed' ? 'Provide a balanced mix across Beginner, Intermediate, Advanced' : difficulty}.
 - Each question MUST include between ${minAnswers} and ${maxAnswers} answer options (randomly vary counts). Vary order & correctness patterns.
 - Exactly ${correctAnswers} correct answer${correctAnswers===1?'':'s'} per question (never 0, never all answers correct, at least one distractor must remain). Do NOT add any icon, tick, emoji, prefix (e.g. ✔, ✅, *, ->, Correct:, etc.) to answers. Provide ONLY plain answer text. Correctness is ONLY represented by the JSON boolean isCorrect.
 - Allow multi-correct format when ${correctAnswers > 1 ? 'multiple' : 'single'} correct answer${correctAnswers===1?'':'s'} are required.
-- Vary question styles: scenario / case study (e.g. "Imagine you are a consultant / analyst and the client asks..."), situational ("Imagine the situation that..."), comparative, pure knowledge recall, troubleshooting, design decision, table-based data interpretation.
+- Vary question styles: scenario / case study (e.g. "Imagine you are a consultant / analyst and the client asks..."), situational ("Imagine the situation that..."), comparative, pure knowledge recall, troubleshooting, design decision, table-based data interpretation.${scenarioInstructions ? '\n' + scenarioInstructions : ''}
 - Vary length & structure; preference: ${lengthPrefText}.
 - Answer option similarity level: ${similarity}/100 (${similarityText}). The higher, the closer the distractors should be to the correct concept while still being clearly distinguishable with expert knowledge.
 - Use authentic domain-specific terminology for ${selectedExamObj.vendor || ''} ${selectedExamObj.exam_code}.
@@ -86,15 +123,19 @@ For EACH question output a JSON object with keys:
   answers: array of objects { text: string, isCorrect: boolean } (answer text MUST NOT contain any correctness markers / icons)
   explanation: rich HTML string using <div>, <p>, <ul>, <li>, <br>, <strong>, tables (<table><thead><tr><th>...</th></tr></thead><tbody>...</tbody></table>) or side-by-side comparisons if useful.
   level: one of Beginner | Intermediate | Advanced
-  category: '${selectedCategory}'
-  exam_code: '${selectedExamObj.exam_code}'
 
 Randomize the distribution of levels (within the constraints) and the number & positions of the ${correctAnswers} correct answer${correctAnswers===1?'':'s'}.
 All explanations must be thorough and justify why each correct answer is correct and why each incorrect answer is not, referencing specific exam-relevant concepts.
 
-Context Material (use to ground and inspire; do NOT copy verbatim, synthesize & transform):\n<CONTEXT>\n${context || '(No additional context provided)'}\n</CONTEXT>\n
+Context Material - MANDATORY SOURCE FOR ALL QUESTIONS:
+<CONTEXT>
+${combinedContext || '(No additional context provided)'}
+</CONTEXT>
+
+CRITICAL INSTRUCTION: Create questions EXCLUSIVELY based on the context material provided above. Do NOT use general knowledge or external information. Every question must be directly derived from, inspired by, or related to the content in the CONTEXT section. If no context is provided, focus strictly on core exam concepts for ${selectedExamObj.exam_code}.
+
 Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions array). Do not wrap in markdown.`;
-  }, [selectedExamObj, selectedCategory, questionCount, difficulty, minAnswers, maxAnswers, lengthPrefText, similarity, similarityText, context, correctAnswers]);
+  }, [selectedExamObj, selectedCategory, questionCount, difficulty, minAnswers, maxAnswers, lengthPrefText, similarity, similarityText, context, correctAnswers, selectedRoles, roleScope, useSimilarQuestions, similarQuestions]);
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false), 2500); } catch {}
@@ -102,7 +143,7 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
 
   const validateQuestion = (q:any, idx:number) => {
     const errors:string[] = [];
-    const requiredKeys = ['question','answers','explanation','level','category','exam_code'];
+    const requiredKeys = ['question','answers','explanation','level'];
     requiredKeys.forEach(k=> { if(!(k in q)) errors.push(`Missing key ${k}`); });
     if(typeof q.question !== 'string' || !q.question.trim()) errors.push('question must be non-empty string');
     if(!Array.isArray(q.answers) || q.answers.length < 2) errors.push('answers must be array length>=2');
@@ -121,16 +162,15 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
     if(typeof q.explanation === 'string' && !/[<][a-zA-Z]+/.test(q.explanation)) errors.push('explanation must contain HTML tags');
     const allowedLevels = ['Beginner','Intermediate','Advanced'];
     if(!allowedLevels.includes(q.level)) errors.push('level invalid');
-    if(q.category !== selectedCategory) errors.push('category mismatch');
-    if(q.exam_code !== selectedExamObj?.exam_code) errors.push('exam_code mismatch');
+    // Category and exam_code validation removed - will be set before saving
     return { index: idx, valid: errors.length===0, errors, question: q };
   };
 
   const parseJson = () => {
     if(!questionsJson.trim()) return;
-    setParsing(true); setParseResults([]); setSanitized(false);
+    setParsing(true); setParseResults([]); setSanitized(false); setQuestionCategories({});
     try {
-      const raw = questionsJson.trim();
+      let raw = questionsJson.trim();
       // Auto-sanitize common escape artifacts (e.g. from markdown export) like \[ \] \_ "exam\_code"
       const cleaned = raw
         // remove backslash before square brackets
@@ -146,6 +186,15 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
       if(!data.questions || !Array.isArray(data.questions)) throw new Error('Root must have questions array');
       const results = data.questions.map((q:any,i:number)=> validateQuestion(q,i));
       setParseResults(results);
+      
+      // Pre-select category for all questions if one is selected
+      if(selectedCategory && results.length > 0) {
+        const preselectedCategories: {[key: number]: string} = {};
+        results.forEach((_: any, index: number) => {
+          preselectedCategories[index] = selectedCategory;
+        });
+        setQuestionCategories(preselectedCategories);
+      }
     } catch(e:any){
       setParseResults([{ index:0, valid:false, errors:[e.message], question:null }]);
     } finally { setParsing(false); }
@@ -184,10 +233,12 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
   const [openExp, setOpenExp] = useState<{[k:number]:boolean}>({});
   const toggleExp = (i:number)=> setOpenExp(o=>({...o, [i]: !o[i]}));
   const [savingOne, setSavingOne] = useState<{[k:number]:boolean}>({});
+  const [showJsonModal, setShowJsonModal] = useState<{[k:number]:boolean}>({});
 
   const saveOne = async (idx:number) => {
     const item = parseResults.find(r=>r.index===idx);
-    if(!item || !item.valid || item.saved || savingOne[idx]) return;
+    const selectedCat = questionCategories[idx];
+    if(!item || !item.valid || item.saved || savingOne[idx] || !selectedCat) return;
     try {
       setSavingOne(s=>({...s, [idx]: true}));
       const q = item.question;
@@ -196,8 +247,8 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
         answers: q.answers.map((a:Answer)=>({ text: a.text, isCorrect: a.isCorrect })),
         explanation: q.explanation.trim(),
         level: q.level,
-        category: q.category,
-        exam_code: q.exam_code,
+        category: selectedCat,
+        exam_code: selectedExamObj?.exam_code || '',
         inactive: selectedExamObj ? !selectedExamObj.is_active : false,
         created_at: new Date().toISOString()
       };
@@ -242,9 +293,9 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
                 )}
               </div>
               <div className="space-y-1">
-                <label className="block text-xs uppercase text-zinc-400">Category*</label>
+                <label className="block text-xs uppercase text-zinc-400">Category (optional for prompt)</label>
                 <select disabled={!selectedExam || categories.length===0} value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)} className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-2 text-sm disabled:opacity-40">
-                  <option value="">-- select category --</option>
+                  <option value="">-- select category (optional) --</option>
                   {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
@@ -270,7 +321,7 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
                 <label className="block text-xs uppercase text-zinc-400">Answer Similarity / Difficulty</label>
                 <span className="text-[10px] text-zinc-400">{similarity}%</span>
               </div>
-              <input type="range" min={0} max={100} value={similarity} onChange={e=>setSimilarity(Number(e.target.value))} className="w-full" />
+              <input type="range" min={0} max={100} value={similarity} onChange={e=>setSimilarity(Number(e.target.value))} className="w-full accent-green-500" />
               <p className="text-[11px] text-zinc-500">{similarityText}</p>
             </div>
             <div className="space-y-2">
@@ -305,13 +356,159 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
               <textarea rows={5} value={context} onChange={e=>setContext(e.target.value)} className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm" placeholder="Background material, product descriptions, architecture notes, constraints ..." />
             </div>
           </div>
+          {/* Section 3.5: Similar Questions for Inspiration */}
+          <div className="space-y-4 border border-zinc-700 rounded p-4 bg-zinc-950/40">
+            <h3 className="text-sm font-medium text-white flex items-center gap-2">
+              3.5 Similar Questions (Inspiration)
+              <span className="text-xs px-2 py-0.5 rounded bg-red-600/20 text-red-300 border border-red-600/40">Copyright Protected</span>
+            </h3>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="useSimilarQuestions"
+                  checked={useSimilarQuestions}
+                  onChange={e => setUseSimilarQuestions(e.target.checked)}
+                  className="rounded"
+                />
+                <label htmlFor="useSimilarQuestions" className="text-xs text-zinc-400">
+                  Include similar questions for tonality inspiration
+                </label>
+              </div>
+              {useSimilarQuestions && (
+                <>
+                  <div className="bg-red-900/20 border border-red-700 rounded p-3 text-xs">
+                    <div className="flex items-start gap-2">
+                      <span className="text-red-400 font-bold">⚠️</span>
+                      <div className="text-red-300">
+                        <div className="font-medium">COPYRIGHT WARNING:</div>
+                        <div className="mt-1 space-y-1 text-[11px]">
+                          <div>• Questions you paste here are copyright protected</div>
+                          <div>• Use ONLY for understanding tonality, style, and complexity level</div>
+                          <div>• The LLM will create completely NEW questions inspired by essence, NOT replicas</div>
+                          <div>• Structure/format is already defined in our prompt - this is for content inspiration only</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-xs uppercase text-zinc-400">Similar Questions (for inspiration only)</label>
+                    <textarea 
+                      rows={6} 
+                      value={similarQuestions} 
+                      onChange={e=>setSimilarQuestions(e.target.value)} 
+                      className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm" 
+                      placeholder="Paste example questions here that demonstrate the desired tonality, writing style, and complexity level. These will inspire the LLM but NOT be copied..." 
+                    />
+                  </div>
+                  <div className="text-xs text-zinc-500">
+                    💡 <strong>Purpose:</strong> Help the LLM understand your preferred question style, complexity, and professional tone without creating copyright violations.
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+          {/* Section 4: Scenario Templates */}
+          <div className="space-y-4 border border-zinc-700 rounded p-4 bg-zinc-950/40">
+            <h3 className="text-sm font-medium text-white">4. Scenario Templates</h3>
+            <div className="space-y-3 text-sm">
+              <div className="space-y-1">
+                <label className="block text-xs uppercase text-zinc-400">Select Scenario Starters</label>
+                <div className="grid grid-cols-1 gap-2 text-xs max-h-40 overflow-y-auto">
+                  {[
+                    'Imagine you are in a client workshop and the customer asks you...',
+                    'During a client meeting, the customer approaches you with the question...',
+                    'You are facilitating a workshop, and a client raises the following question...',
+                    'Picture yourself in a customer session where the client wants to know...',
+                    'While working with a client during a workshop, you are asked...',
+                    'In a consulting engagement, the client asks you the following...',
+                    'You are conducting a workshop when the customer turns to you and says...',
+                    'Consider a scenario where, in a client workshop, the customer asks...',
+                    'As part of a client discussion, you receive the following question...',
+                    'In the middle of a customer workshop, you are confronted with the question...',
+                    'During a project kickoff meeting, a stakeholder inquires...',
+                    'While presenting to the client, you are interrupted with the question...'
+                  ].map(template => (
+                    <button 
+                      key={template}
+                      onClick={() => {
+                        if (selectedRoles.includes(template)) {
+                          setSelectedRoles(selectedRoles.filter(r => r !== template));
+                        } else {
+                          setSelectedRoles([...selectedRoles, template]);
+                        }
+                      }}
+                      type="button" 
+                      className={`px-2 py-1 rounded border text-left text-[11px] ${
+                        selectedRoles.includes(template) 
+                          ? 'bg-blue-600 border-blue-500 text-white'
+                          : 'bg-zinc-800 border-zinc-600 text-zinc-300 hover:bg-zinc-700'
+                      }`}
+                    >
+                      {template}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs uppercase text-zinc-400">Custom Scenario Template</label>
+                <input
+                  type="text" 
+                  value={customRole}
+                  onChange={e => setCustomRole(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && customRole.trim() && !selectedRoles.includes(customRole.trim())) {
+                      setSelectedRoles([...selectedRoles, customRole.trim()]);
+                      setCustomRole('');
+                    }
+                  }}
+                  placeholder="Enter custom scenario starter and press Enter"
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-xs"
+                />
+              </div>
+              {selectedRoles.length > 0 && (
+                <>
+                  <div className="space-y-1">
+                    <label className="block text-xs uppercase text-zinc-400">Selected Templates ({selectedRoles.length})</label>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {selectedRoles.map(template => (
+                        <div key={template} className="flex items-center gap-2 px-2 py-1 bg-blue-600/20 border border-blue-600 rounded text-[10px]">
+                          <span className="flex-1 text-blue-300">{template}</span>
+                          <button
+                            onClick={() => setSelectedRoles(selectedRoles.filter(r => r !== template))}
+                            className="hover:bg-blue-700 rounded px-1 py-0.5 text-white"
+                            type="button"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs uppercase text-zinc-400">Apply Templates To</label>
+                    <div className="flex gap-3 text-xs">
+                      {['all','some'].map(scope => (
+                        <button key={scope} onClick={()=>setRoleScope(scope as any)} type="button" className={`px-3 py-1 rounded border ${roleScope===scope ? 'bg-blue-600 border-blue-500 text-white':'bg-zinc-800 border-zinc-600 text-zinc-300'}`}>
+                          {scope === 'all' ? 'All Questions' : 'Some Questions'}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-zinc-500">
+                      {roleScope === 'all' ? 'Selected scenario templates will be applied to every question generated.' : 'Selected scenario templates will be applied to a mix of questions (some with templates, some without).'}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
         {/* RIGHT SIDE PROMPT */}
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-white">Generated Master Prompt</h3>
           <textarea readOnly rows={32} value={prompt} className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-[12px] font-mono leading-relaxed" />
           <div className="flex items-center gap-3 flex-wrap">
-            <button onClick={copy} disabled={!selectedExam || !selectedCategory} className="flex items-center gap-2 text-xs px-3 py-1.5 rounded bg-green-600 hover:bg-green-500 disabled:opacity-40">
+            <button onClick={copy} disabled={!selectedExam} className="flex items-center gap-2 text-xs px-3 py-1.5 rounded bg-green-600 hover:bg-green-500 disabled:opacity-40">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 16h8a2 2 0 002-2V6a2 2 0 00-2-2H8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16 8h2a2 2 0 012 2v8a2 2 0 01-2 2H10a2 2 0 01-2-2v-2" />
@@ -328,8 +525,7 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
         <h3 className="text-sm font-medium text-white">Questions JSON (Paste Model Output)</h3>
         <textarea rows={14} value={questionsJson} onChange={e=>setQuestionsJson(e.target.value)} placeholder='{"questions": [ ... ] }' className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-[12px] font-mono" />
         <div className="flex gap-2">
-          <button onClick={parseJson} disabled={!questionsJson.trim() || !selectedExam || !selectedCategory || parsing} className="px-3 py-1.5 text-xs rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40">{parsing ? 'Parsing...' : 'Validate JSON'}</button>
-          <button onClick={saveValid} disabled={!parseResults.some(r=>r.valid && !r.saved) || savingBulk} className="px-3 py-1.5 text-xs rounded bg-green-600 hover:bg-green-500 disabled:opacity-40">{savingBulk ? 'Saving...' : 'Save Valid'}</button>
+          <button onClick={parseJson} disabled={!questionsJson.trim() || !selectedExam || parsing} className="px-3 py-1.5 text-xs rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40">{parsing ? 'Parsing...' : 'Validate JSON'}</button>
         </div>
         {parseResults.length>0 && (
           <div className="space-y-2 text-[11px]">
@@ -367,7 +563,43 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
                     <div className="flex items-center gap-2 text-[10px] text-zinc-400">
                       <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700">{r.question.level}</span>
                       <button onClick={()=>toggleExp(r.index)} className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs">{openExp[r.index] ? 'Hide Explanation' : 'Show Explanation'}</button>
-                      <button disabled={r.saved || savingOne[r.index]} onClick={()=>saveOne(r.index)} className="px-2 py-0.5 rounded bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white text-xs">{r.saved ? 'Saved' : (savingOne[r.index] ? 'Saving...' : 'Save')}</button>
+                      <button 
+                        onClick={()=>setShowJsonModal(prev=>({...prev, [r.index]: true}))} 
+                        className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 border border-blue-700 text-white text-xs flex items-center gap-1"
+                        title="View JSON"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                        JSON
+                      </button>
+                      <button disabled={r.saved || savingOne[r.index] || !questionCategories[r.index]} onClick={()=>saveOne(r.index)} className="px-2 py-0.5 rounded bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white text-xs">{r.saved ? 'Saved' : (savingOne[r.index] ? 'Saving...' : 'Save')}</button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-zinc-400">Exam Code:</label>
+                      <input 
+                        type="text" 
+                        value={selectedExamObj?.exam_code || ''} 
+                        readOnly
+                        className="bg-zinc-800/60 border border-zinc-600 rounded px-2 py-1 text-xs text-zinc-400 cursor-not-allowed"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-zinc-400">Category*:</label>
+                      <select 
+                        value={questionCategories[r.index] || ''} 
+                        onChange={e => setQuestionCategories(prev => ({...prev, [r.index]: e.target.value}))}
+                        className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-xs"
+                        disabled={r.saved}
+                      >
+                        <option value="">-- select category --</option>
+                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      {!questionCategories[r.index] && !r.saved && (
+                        <span className="text-red-400 text-xs">Category required to save</span>
+                      )}
                     </div>
                   </div>
                   <ul className="mt-3 space-y-1 text-sm">
@@ -390,6 +622,53 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
         )}
         <p className="text-[10px] text-zinc-500">Only valid questions (correct keys, same category & exam_code, HTML explanation) will be saved.</p>
       </div>
+      
+      {/* JSON Modal */}
+      {Object.entries(showJsonModal).map(([index, isOpen]) => {
+        if (!isOpen) return null;
+        const idx = parseInt(index);
+        const result = parseResults.find(r => r.index === idx);
+        if (!result?.question) return null;
+        
+        return (
+          <div key={idx} className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/70" onClick={()=>setShowJsonModal(prev=>({...prev, [idx]: false}))} />
+            <div className="relative w-full max-w-4xl max-h-[80vh] bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-zinc-700">
+                <h3 className="text-base font-semibold text-white">Question JSON - Q{idx+1}</h3>
+                <button 
+                  onClick={()=>setShowJsonModal(prev=>({...prev, [idx]: false}))} 
+                  className="p-1 rounded hover:bg-zinc-700" 
+                  aria-label="Close"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto p-4">
+                <pre className="text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words leading-relaxed">
+                  {JSON.stringify({
+                    ...result.question,
+                    exam_code: selectedExamObj?.exam_code || '',
+                    category: questionCategories[idx] || '',
+                    inactive: selectedExamObj ? !selectedExamObj.is_active : false,
+                    created_at: new Date().toISOString()
+                  }, null, 2)}
+                </pre>
+              </div>
+              <div className="p-4 border-t border-zinc-700 flex justify-end">
+                <button 
+                  onClick={()=>setShowJsonModal(prev=>({...prev, [idx]: false}))} 
+                  className="px-3 py-1.5 text-xs rounded bg-green-600 hover:bg-green-500"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
       {showHelp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={()=>setShowHelp(false)} />
@@ -402,8 +681,8 @@ Return ONLY valid JSON: { "questions": [ ... ] } (an object with a questions arr
             </div>
             <ol className="list-decimal list-inside space-y-2 text-zinc-300">
               <li><span className="font-medium text-white">Select & Configure:</span> Choose Exam + Category and set generation parameters (quantity, difficulty, similarity, answer counts, correct answers, etc.).</li>
-              <li><span className="font-medium text-white">Copy Prompt:</span> Click &quot;Copy Prompt&quot; and send it unchanged to the LLM (no markdown wrapping, keep JSON skeleton intact).</li>
-              <li><span className="font-medium text-white">Paste & Validate JSON:</span> Paste the raw JSON response, click &quot;Validate JSON&quot; and resolve any errors (icons, wrong counts, missing HTML in explanation, etc.).</li>
+              <li><span className="font-medium text-white">Copy Prompt:</span> Click "Copy Prompt" and send it unchanged to the LLM (no markdown wrapping, keep JSON skeleton intact).</li>
+              <li><span className="font-medium text-white">Paste & Validate JSON:</span> Paste the raw JSON response, click "Validate JSON" and resolve any errors (icons, wrong counts, missing HTML in explanation, etc.).</li>
               <li><span className="font-medium text-white">Save:</span> Save all valid questions in bulk or individually after previewing answers & explanation.</li>
             </ol>
             <div className="text-[11px] text-zinc-500">Notes: No icons / ticks / prefixes in answers. Exactly the configured number of correct answers. Explanations must use HTML tags. Category & exam_code must match.</div>

@@ -6,7 +6,8 @@ export interface DashboardStats {
   totalCategories: number;
   totalCompetitors: number;
   activeExams: number;
-  featuredExams: number;
+  questionsWithoutCategory: number;
+  recentlyUpdatedQuestions: number;
 }
 
 export interface QuestionsData {

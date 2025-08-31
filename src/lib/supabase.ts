@@ -158,10 +158,54 @@ export const dbService = {
         console.error('Unexpected error counting active exams:', err);
       }
 
+      // Count questions without category
+      const { count: noCategoryCount, error: noCategoryError } = await supabase
+        .from('questions')
+        .select('*', { count: 'exact', head: true })
+        .or('category.is.null,category.eq.');
+
+      if (noCategoryError) {
+        console.error('Error counting questions without category:', noCategoryError);
+      }
+
+      // Count recently updated questions (last 6 months, updated_at > created_at)
+      // Use same logic as admin tab - fetch data and filter in JavaScript
+      let recentlyUpdatedCount = 0;
+      try {
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        
+        const { data: updatedQuestions, error: updatedError } = await supabase
+          .from('questions')
+          .select('updated_at, created_at')
+          .not('updated_at', 'is', null)
+          .not('created_at', 'is', null)
+          .gte('updated_at', sixMonthsAgo.toISOString());
+
+        if (updatedError) {
+          console.error('Error fetching recently updated questions:', updatedError);
+        } else {
+          // Apply same filtering logic as admin tab
+          const FIVE_MIN = 5 * 60 * 1000;
+          const filteredUpdated = (updatedQuestions || []).filter((q: any) => {
+            if (!q.updated_at || isNaN(Date.parse(q.updated_at))) return false;
+            if (!q.created_at || isNaN(Date.parse(q.created_at))) return false;
+            const diff = new Date(q.updated_at).getTime() - new Date(q.created_at).getTime();
+            if (diff < 0) return false; // corrupted timestamps
+            if (diff < FIVE_MIN) return false; // exclude updates within first 5 minutes of creation
+            return true;
+          });
+          recentlyUpdatedCount = filteredUpdated.length;
+        }
+      } catch (e) {
+        console.error('Error counting recently updated questions:', e);
+      }
+
       const stats = {
         ...baseCounts,
         activeExams: activeExamCountValue || Math.floor(baseCounts.totalExams * 0.7), // Fallback to 70% if no status/is_active field
-        featuredExams: Math.floor(baseCounts.totalExams * 0.3) // Placeholder calculation
+        questionsWithoutCategory: noCategoryCount || 0,
+        recentlyUpdatedQuestions: recentlyUpdatedCount || 0
       };
 
       console.log('Dashboard stats loaded:', stats);
@@ -646,6 +690,35 @@ export const dbService = {
       return data;
     } catch(e) {
       console.error('createExamPage error:', e);
+      throw e;
+    }
+  },
+
+  async upsertQuestionEmbedding(id: string | number, embedding: number[]) {
+    try {
+      const { error } = await supabase
+        .from('questions')
+        .update({ embedding })
+        .eq('id', id);
+      if (error) throw new Error(`Error updating embedding: ${error.message}`);
+      return true;
+    } catch (e) {
+      console.error('upsertQuestionEmbedding error:', e);
+      throw e;
+    }
+  },
+
+  async semanticSearch(queryEmbedding: number[], matchCount = 10, similarityThreshold = 0.6) {
+    try {
+      const { data, error } = await supabase.rpc('match_questions', {
+        query_embedding: queryEmbedding,
+        match_count: matchCount,
+        similarity_threshold: similarityThreshold
+      });
+      if (error) throw new Error(`semanticSearch RPC error: ${error.message}`);
+      return data || [];
+    } catch (e) {
+      console.error('semanticSearch error:', e);
       throw e;
     }
   },

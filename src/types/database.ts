@@ -34,6 +34,8 @@ export interface Question {
   inactive: boolean;
   updated_at?: string; // added
   created_at?: string; // added for recent activity
+  embedding?: number[] | null; // vector embedding (pgvector)
+  searchable_text?: string | null; // denormalized hybrid search text
 }
 
 export interface Answer {
