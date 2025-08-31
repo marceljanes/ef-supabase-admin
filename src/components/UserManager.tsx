@@ -288,7 +288,7 @@ export default function UserManager() {
                   <label className="block text-sm font-medium text-zinc-300 mb-2">Role</label>
                   <select
                     value={newUser.role}
-                    onChange={e => setNewUser(prev => ({ ...prev, role: e.target.value as any }))}
+                    onChange={e => setNewUser(prev => ({ ...prev, role: e.target.value as AdminUser['role'] }))}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                   >
                     <option value="Contributor">Contributor</option>
@@ -300,7 +300,7 @@ export default function UserManager() {
                   <label className="block text-sm font-medium text-zinc-300 mb-2">Status</label>
                   <select
                     value={newUser.status}
-                    onChange={e => setNewUser(prev => ({ ...prev, status: e.target.value as any }))}
+                    onChange={e => setNewUser(prev => ({ ...prev, status: e.target.value as AdminUser['status'] }))}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                   >
                     <option value="Active">Active</option>
@@ -367,7 +367,7 @@ export default function UserManager() {
                   <label className="block text-sm font-medium text-zinc-300 mb-2">Role</label>
                   <select
                     value={editingUser.role}
-                    onChange={e => setEditingUser(prev => ({ ...prev!, role: e.target.value as any }))}
+                    onChange={e => setEditingUser(prev => ({ ...prev!, role: e.target.value as AdminUser['role'] }))}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                   >
                     <option value="Contributor">Contributor</option>
@@ -379,7 +379,7 @@ export default function UserManager() {
                   <label className="block text-sm font-medium text-zinc-300 mb-2">Status</label>
                   <select
                     value={editingUser.status}
-                    onChange={e => setEditingUser(prev => ({ ...prev!, status: e.target.value as any }))}
+                    onChange={e => setEditingUser(prev => ({ ...prev!, status: e.target.value as AdminUser['status'] }))}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                   >
                     <option value="Active">Active</option>

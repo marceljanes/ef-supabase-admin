@@ -1,16 +1,16 @@
 import React from 'react';
+import { LucideIcon } from 'lucide-react';
 
 type Props = {
-  icon: any;
+  icon: LucideIcon;
   title: string;
   value: number | string;
   subtitle?: string;
-  color?: string;
   change?: string; // e.g. "+2 this week"
   trend?: 'up' | 'down' | 'neutral';
 };
 
-export default function StatCard({ icon: Icon, title, value, subtitle, color = 'bg-zinc-800', change, trend = 'neutral' }: Props) {
+export default function StatCard({ icon: Icon, title, value, subtitle, change, trend = 'neutral' }: Props) {
   const trendColor = trend === 'up' ? 'text-green-400' : trend === 'down' ? 'text-red-400' : 'text-zinc-400';
   return (
     <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 hover:border-zinc-600 transition-colors">

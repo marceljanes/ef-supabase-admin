@@ -171,7 +171,7 @@ Return ONLY valid JSON: { "questions": [ { question, answers:[{text,isCorrect}],
   const parseJson = () => {
     if(!questionsJson.trim()) return; setParsing(true); setParseResults([]); setSanitized(false);
     try {
-      let raw = questionsJson.trim();
+      const raw = questionsJson.trim();
       const cleaned = raw.replace(/\\(?=\[)/g,'').replace(/\\(?=\])/g,'').replace(/\\_/g,'_');
       if(cleaned!==raw) setSanitized(true);
       let data = JSON.parse(cleaned);

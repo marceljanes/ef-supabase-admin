@@ -426,7 +426,6 @@ export default function AdminDashboard() {
                 icon={BookOpen}
                 change={"+2 this week"}
                 trend="up"
-                color="bg-green-900/30"
               />
               <StatCard
                 title="Total Questions"
@@ -434,7 +433,6 @@ export default function AdminDashboard() {
                 icon={HelpCircle}
                 change={"+15 this week"}
                 trend="up"
-                color="bg-blue-900/30"
               />
               <StatCard
                 title="Active Exams"
@@ -442,7 +440,6 @@ export default function AdminDashboard() {
                 icon={Activity}
                 change={"1 activated today"}
                 trend="up"
-                color="bg-emerald-900/30"
               />
               <StatCard
                 title="Categories"
@@ -450,7 +447,6 @@ export default function AdminDashboard() {
                 icon={FolderOpen}
                 change={"No change"}
                 trend="neutral"
-                color="bg-purple-900/30"
               />
               <StatCard
                 title="Questions ohne Category"
@@ -458,7 +454,6 @@ export default function AdminDashboard() {
                 icon={Star}
                 change={stats.questionsWithoutCategory === 0 ? "Alle haben Category" : "Need attention"}
                 trend={stats.questionsWithoutCategory === 0 ? "up" : "down"}
-                color="bg-yellow-900/30"
               />
               <StatCard
                 title="Recently Updated Questions"
@@ -466,7 +461,6 @@ export default function AdminDashboard() {
                 icon={Eye}
                 change={stats.recentlyUpdatedQuestions > 0 ? `${stats.recentlyUpdatedQuestions} in last 6 months` : "No recent updates"}
                 trend={stats.recentlyUpdatedQuestions > 0 ? "up" : "neutral"}
-                color="bg-teal-900/30"
               />
             </div>
 
