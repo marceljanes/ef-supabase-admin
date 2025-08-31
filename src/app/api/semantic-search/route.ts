@@ -129,7 +129,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: error.message }, { status: 500 })
         }
       } else {
-        console.log('Hybrid raw results with scores:', (data || []).slice(0, 5).map(r => ({ id: r.id, score: r.score, exam: r.exam_code })))
+        console.log('Hybrid raw results with scores:', (data || []).slice(0, 5).map((r: HybridRow) => ({ id: r.id, score: r.score, exam: r.exam_code })))
         results = (data || []).filter((r: any) => r.score >= threshold)
         console.log('Hybrid results after threshold filtering:', results.length)
         if (results.length === 0 && data && data.length > 0) {
