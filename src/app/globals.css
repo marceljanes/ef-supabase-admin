@@ -1,29 +1,11 @@
 @import "tailwindcss";
 
+/* Force dark theme regardless of system preference */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --bg: #ffffff;
-  --fg: #18181b;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --bg: #09090b;
-    --fg: #ffffff;
-  }
-}
-
-html[data-theme='light'] body {
-  background: var(--bg);
-  color: var(--fg);
-}
-
-html[data-theme='dark'] body {
-  background: var(--bg);
-  color: var(--fg);
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --bg: #09090b;
+  --fg: #ffffff;
 }
 
 body {

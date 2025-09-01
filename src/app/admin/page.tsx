@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { dbService } from '@/lib/supabase';
 import { Question } from '@/types/database';
 import { DashboardStats, DeletingState, ExamPage } from '@/types/admin';
+import { ProtectedRoute } from '@/components/AuthProvider';
+import Header from '@/components/Header';
 import StatCard from '@/components/StatCard';
 import QuickActionCard from '@/components/QuickActionCard';
 import QuestionsList from '@/components/QuestionsList';
@@ -16,6 +18,8 @@ import QuestionPromptBuilder from '@/components/QuestionPromptBuilder';
 import UpdateQuestions from '@/components/UpdateQuestions';
 import ExamTrainer from '@/components/ExamTrainer';
 import PMI from '@/components/PMI';
+import KnowledgeManager from '@/components/KnowledgeManager';
+import UserManager from '@/components/UserManager';
 import { 
   BookOpen, 
   HelpCircle, 
@@ -29,7 +33,8 @@ import {
   Sun,
   Moon,
   Users,
-  Kanban
+  Kanban,
+  Brain
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -338,65 +343,42 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className={`min-h-screen transition-colors duration-500 ${
-      activeTab==='trainer'
-        ? (trainerTheme==='light'
-            ? 'bg-gradient-to-br from-zinc-100 via-white to-zinc-200'
-            : 'bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-800')
-        : 'bg-zinc-800'
-    }`}>
-      {/* Header */}
-      <header className="bg-zinc-900 border-b border-zinc-700">
+    <ProtectedRoute>
+      <div className="min-h-screen bg-zinc-900">
+        <Header />
+        <div className={`min-h-screen transition-colors duration-500 ${
+          activeTab==='trainer'
+            ? (trainerTheme==='light'
+                ? 'bg-gradient-to-br from-zinc-100 via-white to-zinc-200'
+                : 'bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-800')
+            : 'bg-zinc-800'
+        }`}>
+      {/* Navigation Tabs */}
+      <div className="bg-zinc-900 border-b border-zinc-700">
         {/* Flash Message */}
         {flash && (
           <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-md border text-sm shadow-lg backdrop-blur bg-zinc-900/80 border-green-500/40 text-green-300 animate-fade-in">
             {flash.message}
           </div>
         )}
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <svg width="40" height="40" viewBox="0 0 48 48" className="drop-shadow" aria-hidden="true">
-                  <defs>
-                    <linearGradient id="efGrad" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#34d399" />
-                      <stop offset="55%" stopColor="#059669" />
-                      <stop offset="100%" stopColor="#0f766e" />
-                    </linearGradient>
-                  </defs>
-                  <path d="M23.7 3.6c1-.6 2.3-.6 3.3 0l13.6 7.9c1 .6 1.7 1.7 1.7 2.9v15.8c0 1.2-.6 2.3-1.7 2.9L27 41c-1 .6-2.3.6-3.3 0l-13.6-7.9c-1-.6-1.7-1.7-1.7-2.9V14.4c0-1.2.6-2.3 1.7-2.9L23.7 3.6Z" fill="url(#efGrad)" />
-                  <path d="M17 30.5h14M17 24h14M17 17.5h14" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold tracking-tight bg-gradient-to-r from-emerald-300 via-emerald-400 to-teal-300 bg-clip-text text-transparent">Exam Forge</h1>
-                <p className="text-xs text-zinc-500 uppercase tracking-wider">Admin Console</p>
-              </div>
-            </div>
-            {/* Removed green create questions button */}
-          </div>
-        </div>
-      </header>
-
-      {/* Navigation Tabs */}
-      <div className="bg-zinc-900 border-b border-zinc-700">
         <div className="max-w-7xl mx-auto px-6">
-          <nav className="flex space-x-6">
+          <nav className="flex space-x-2">
             {[
-              { id: 'overview', label: 'Dashboard', icon: <TrendingUp className="h-4 w-4" /> },
-              { id: 'questions', label: 'Questions', icon: <HelpCircle className="h-4 w-4" /> },
-              { id: 'exams', label: 'Exams', icon: <BookOpen className="h-4 w-4" /> },
-              { id: 'categories', label: 'Categories', icon: <FolderOpen className="h-4 w-4" /> },
-              { id: 'pmi', label: 'PMI', icon: <Kanban className="h-4 w-4" /> },
-              { id: 'create', label: 'Create Questions', icon: null },
-              { id: 'update', label: 'Update Questions', icon: null },
-              { id: 'trainer', label: 'Exam Trainer', icon: <Activity className="h-4 w-4" /> }
+              { id: 'overview', label: 'Dashboard', icon: <TrendingUp className="h-2.5 w-2.5" /> },
+              { id: 'questions', label: 'Questions', icon: <HelpCircle className="h-2.5 w-2.5" /> },
+              { id: 'exams', label: 'Exams', icon: <BookOpen className="h-2.5 w-2.5" /> },
+              { id: 'knowledge', label: 'Knowledge', icon: <Brain className="h-2.5 w-2.5" /> },
+              { id: 'users', label: 'Users', icon: <Users className="h-2.5 w-2.5" /> },
+              { id: 'categories', label: 'Categories', icon: <FolderOpen className="h-2.5 w-2.5" /> },
+              { id: 'pmi', label: 'PMI', icon: <Kanban className="h-2.5 w-2.5" /> },
+              { id: 'create', label: 'Create', icon: <Plus className="h-2.5 w-2.5" /> },
+              { id: 'update', label: 'Update', icon: <Filter className="h-2.5 w-2.5" /> },
+              { id: 'trainer', label: 'Trainer', icon: <Activity className="h-2.5 w-2.5" /> }
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
+                className={`flex items-center space-x-1 px-2 py-1 border-b-2 transition-colors text-xs ${
                   activeTab === tab.id
                     ? 'border-green-500 text-green-500'
                     : 'border-transparent text-zinc-400 hover:text-zinc-300 hover:border-zinc-400'
@@ -665,6 +647,16 @@ export default function AdminDashboard() {
           <ExamsTable examPages={examPages} loading={examPagesLoading} onUpdate={updateExamPage} />
         )}
 
+        {/* Knowledge Tab */}
+        {activeTab === 'knowledge' && (
+          <KnowledgeManager />
+        )}
+
+        {/* Users Tab */}
+        {activeTab === 'users' && (
+          <UserManager />
+        )}
+
         {/* Categories Tab */}
         {activeTab === 'categories' && (
           <ExamCategoriesManager />
@@ -766,6 +758,8 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
-    </div>
+        </div>
+      </div>
+    </ProtectedRoute>
   );
 }

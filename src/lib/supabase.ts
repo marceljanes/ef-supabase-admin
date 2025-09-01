@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Question as BaseQuestion, ExamPage as BaseExamPage, ExamCategory as BaseExamCategory, Answer } from '@/types/database';
+import { Question as BaseQuestion, ExamPage as BaseExamPage, ExamCategory as BaseExamCategory, Answer, Knowledge, KnowledgeChunk, UserProfile } from '@/types/database';
 
 // Local helper types (DB uses numeric ids for questions often)
 export interface QuestionLike extends Omit<BaseQuestion,'id'> { id: number | string; }
@@ -32,7 +32,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
   }
 });
 
@@ -663,6 +665,22 @@ export const dbService = {
   async createExamPage(payload: CreateExamPageInput) {
     try {
       if(!payload.exam_code || !payload.exam_name) throw new Error('exam_code & exam_name required');
+      
+      // Check if exam_code already exists
+      const { data: existingExam, error: checkError } = await supabase
+        .from('exam_pages')
+        .select('exam_code')
+        .ilike('exam_code', payload.exam_code)
+        .limit(1);
+      
+      if (checkError) {
+        throw new Error(`Error checking exam code uniqueness: ${checkError.message}`);
+      }
+      
+      if (existingExam && existingExam.length > 0) {
+        throw new Error(`Exam code "${payload.exam_code}" already exists`);
+      }
+      
       const defaults = {
         vendor: null,
         is_active: true,
@@ -719,6 +737,540 @@ export const dbService = {
       return data || [];
     } catch (e) {
       console.error('semanticSearch error:', e);
+      throw e;
+    }
+  },
+
+  // Knowledge Management Functions
+  async getKnowledge(options: { 
+    page?: number; 
+    limit?: number; 
+    category?: string; 
+    search?: string;
+    includeChunks?: boolean;
+  } = {}) {
+    try {
+      const { page = 1, limit = 20, category, search, includeChunks = false } = options;
+      const offset = (page - 1) * limit;
+
+      let query = supabase
+        .from('knowledge')
+        .select('*')
+        .order('updated_at', { ascending: false });
+
+      if (category) {
+        query = query.eq('category', category);
+      }
+
+      if (search) {
+        query = query.or(`title.ilike.%${search}%, description.ilike.%${search}%, content.ilike.%${search}%`);
+      }
+
+      const { data, error, count } = await query
+        .range(offset, offset + limit - 1)
+        .limit(limit);
+
+      if (error) throw new Error(error.message);
+
+      const { count: totalCount } = await supabase
+        .from('knowledge')
+        .select('*', { count: 'exact', head: true });
+
+      return {
+        data: data || [],
+        total: totalCount || 0,
+        page,
+        limit,
+        totalPages: Math.ceil((totalCount || 0) / limit)
+      };
+    } catch (e) {
+      console.error('getKnowledge error:', e);
+      throw e;
+    }
+  },
+
+  async getKnowledgeById(id: number) {
+    try {
+      const { data, error } = await supabase
+        .from('knowledge')
+        .select(`
+          *,
+          chunks:knowledge_chunks(*)
+        `)
+        .eq('id', id)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('getKnowledgeById error:', e);
+      throw e;
+    }
+  },
+
+  async createKnowledge(payload: Partial<Knowledge> & { title: string; content: string }) {
+    try {
+      const { data, error } = await supabase
+        .from('knowledge')
+        .insert({
+          title: payload.title,
+          description: payload.description || null,
+          content: payload.content,
+          category: payload.category || null,
+          tags: payload.tags || null,
+          is_active: payload.is_active ?? true,
+          created_by: payload.created_by || 'admin',
+          document_type: payload.document_type || 'text',
+          file_path: payload.file_path || null
+        })
+        .select('*')
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('createKnowledge error:', e);
+      throw e;
+    }
+  },
+
+  async updateKnowledge(id: number, payload: Partial<Knowledge>) {
+    try {
+      const { data, error } = await supabase
+        .from('knowledge')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('updateKnowledge error:', e);
+      throw e;
+    }
+  },
+
+  async deleteKnowledge(id: number) {
+    try {
+      const { error } = await supabase
+        .from('knowledge')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw new Error(error.message);
+      return true;
+    } catch (e) {
+      console.error('deleteKnowledge error:', e);
+      throw e;
+    }
+  },
+
+  async getKnowledgeChunks(knowledgeId: number) {
+    try {
+      const { data, error } = await supabase
+        .from('knowledge_chunks')
+        .select('*')
+        .eq('knowledge_id', knowledgeId)
+        .order('chunk_order');
+
+      if (error) throw new Error(error.message);
+      return data || [];
+    } catch (e) {
+      console.error('getKnowledgeChunks error:', e);
+      throw e;
+    }
+  },
+
+  async createKnowledgeChunk(payload: Partial<KnowledgeChunk> & { knowledge_id: number; content: string }) {
+    try {
+      const { data, error } = await supabase
+        .from('knowledge_chunks')
+        .insert({
+          knowledge_id: payload.knowledge_id,
+          chunk_order: payload.chunk_order || 1,
+          title: payload.title || null,
+          content: payload.content,
+          chunk_type: payload.chunk_type || 'text'
+        })
+        .select('*')
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('createKnowledgeChunk error:', e);
+      throw e;
+    }
+  },
+
+  async updateKnowledgeChunk(id: number, payload: Partial<KnowledgeChunk>) {
+    try {
+      const { data, error } = await supabase
+        .from('knowledge_chunks')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('updateKnowledgeChunk error:', e);
+      throw e;
+    }
+  },
+
+  async deleteKnowledgeChunk(id: number) {
+    try {
+      const { error } = await supabase
+        .from('knowledge_chunks')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw new Error(error.message);
+      return true;
+    } catch (e) {
+      console.error('deleteKnowledgeChunk error:', e);
+      throw e;
+    }
+  },
+
+  async getKnowledgeCategories() {
+    try {
+      const { data, error } = await supabase
+        .from('knowledge')
+        .select('category')
+        .not('category', 'is', null);
+
+      if (error) throw new Error(error.message);
+      
+      const categories = [...new Set(data?.map(item => item.category).filter(Boolean))];
+      return categories.sort();
+    } catch (e) {
+      console.error('getKnowledgeCategories error:', e);
+      throw e;
+    }
+  },
+
+  // User Management Functions
+  async getUsers() {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      return data || [];
+    } catch (e) {
+      console.error('getUsers error:', e);
+      return [];
+    }
+  },
+
+  async getUserById(id: string) {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('getUserById error:', e);
+      throw e;
+    }
+  },
+
+  async updateUser(id: string, payload: Partial<UserProfile>) {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('updateUser error:', e);
+      throw e;
+    }
+  },
+
+  async deleteUser(id: string) {
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw new Error(error.message);
+      return true;
+    } catch (e) {
+      console.error('deleteUser error:', e);
+      throw e;
+    }
+  },
+
+  async approveUser(userId: string, approverId: string) {
+    try {
+      const { error } = await supabase.rpc('approve_user', {
+        user_id: userId,
+        approver_id: approverId
+      });
+
+      if (error) throw new Error(error.message);
+      return true;
+    } catch (e) {
+      console.error('approveUser error:', e);
+      throw e;
+    }
+  },
+
+  async rejectUser(userId: string, approverId: string, reason: string) {
+    try {
+      const { error } = await supabase.rpc('reject_user', {
+        user_id: userId,
+        approver_id: approverId,
+        reason: reason
+      });
+
+      if (error) throw new Error(error.message);
+      return true;
+    } catch (e) {
+      console.error('rejectUser error:', e);
+      throw e;
+    }
+  },
+
+  async getPendingUsers() {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+
+      if (error) throw new Error(error.message);
+      return data || [];
+    } catch (e) {
+      console.error('getPendingUsers error:', e);
+      return [];
+    }
+  },
+
+  // Auth functions
+  async signUp(email: string, password: string) {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('signUp error:', e);
+      throw e;
+    }
+  },
+
+  async signIn(email: string, password: string) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('signIn error:', e);
+      throw e;
+    }
+  },
+
+  async signOut() {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw new Error(error.message);
+      return true;
+    } catch (e) {
+      console.error('signOut error:', e);
+      throw e;
+    }
+  },
+
+  async getCurrentUser() {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error('Session error:', error);
+        return null;
+      }
+      
+      if (!session?.user) {
+        console.log('No active session found');
+        return null;
+      }
+      
+      return session.user;
+    } catch (e) {
+      console.error('getCurrentUser error:', e);
+      return null;
+    }
+  },
+
+  async getCurrentUserProfile() {
+    try {
+      const user = await this.getCurrentUser();
+      if (!user) return null;
+
+      console.log('Fetching fresh user profile for:', user.email);
+      
+      // Force a fresh fetch from the database
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        return null;
+      }
+
+      console.log('Fresh user profile:', data);
+      return data;
+    } catch (e) {
+      console.error('getCurrentUserProfile error:', e);
+      return null;
+    }
+  },
+
+  // Task Management Functions
+  async getTasks() {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select(`
+          *,
+          author:author_id(id, email, full_name),
+          assignee:assignee_id(id, email, full_name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      return data || [];
+    } catch (e) {
+      console.error('getTasks error:', e);
+      throw e;
+    }
+  },
+
+  async createTask(task: {
+    title: string;
+    description?: string;
+    assignee_id?: string;
+    priority: 'low' | 'medium' | 'high' | 'urgent';
+    exam_code?: string;
+    difficulty: 'beginner' | 'intermediate' | 'advanced' | 'mixed';
+    due_date?: string;
+    tags?: string[];
+  }) {
+    try {
+      const user = await this.getCurrentUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert({
+          ...task,
+          author_id: user.id,
+          status: 'idea'
+        })
+        .select(`
+          *,
+          author:author_id(id, email, full_name),
+          assignee:assignee_id(id, email, full_name)
+        `)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('createTask error:', e);
+      throw e;
+    }
+  },
+
+  async updateTaskStatus(taskId: string, status: 'idea' | 'demand' | 'in-progress' | 'done') {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({ status })
+        .eq('id', taskId)
+        .select(`
+          *,
+          author:author_id(id, email, full_name),
+          assignee:assignee_id(id, email, full_name)
+        `)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('updateTaskStatus error:', e);
+      throw e;
+    }
+  },
+
+  async updateTask(taskId: string, updates: {
+    title?: string;
+    description?: string;
+    assignee_id?: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    exam_code?: string;
+    difficulty?: 'beginner' | 'intermediate' | 'advanced' | 'mixed';
+    due_date?: string;
+    tags?: string[];
+  }) {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .update(updates)
+        .eq('id', taskId)
+        .select(`
+          *,
+          author:author_id(id, email, full_name),
+          assignee:assignee_id(id, email, full_name)
+        `)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('updateTask error:', e);
+      throw e;
+    }
+  },
+
+  async deleteTask(taskId: string) {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) throw new Error(error.message);
+      return true;
+    } catch (e) {
+      console.error('deleteTask error:', e);
       throw e;
     }
   },

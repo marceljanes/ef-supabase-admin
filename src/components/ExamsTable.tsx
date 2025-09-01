@@ -17,10 +17,25 @@ export default function ExamsTable({ examPages, loading, onUpdate }: ExamsTableP
     exam_name: '',
     vendor: '',
     is_active: true,
-    is_featured: false
+    is_featured: false,
+    difficulty_level: '',
+    display_order: '',
+    header_label: '',
+    url_path: '',
+    icon_name: '',
+    seo_title: '',
+    seo_h1: '',
+    seo_meta_description: '',
+    seo_keywords: '',
+    seo_canonical_url: '',
+    seo_google_snippet: '',
+    estimated_duration: ''
   });
   const [vendorSearch, setVendorSearch] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [templateExam, setTemplateExam] = useState<ExamPage | null>(null);
+  const [codeValidationError, setCodeValidationError] = useState<string>('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   // New local filter state (all vs active only)
   const [filterMode, setFilterMode] = useState<'all' | 'active'>('all');
 
@@ -89,18 +104,131 @@ export default function ExamsTable({ examPages, loading, onUpdate }: ExamsTableP
       console.error('SEO save failed', e);
     }
   };
-  const resetNew = () => setNewExam({ exam_code:'', exam_name:'', vendor:'', is_active:true, is_featured:false });
+  const resetNew = () => setNewExam({ 
+    exam_code:'', 
+    exam_name:'', 
+    vendor:'', 
+    is_active:true, 
+    is_featured:false,
+    difficulty_level: '',
+    display_order: '',
+    header_label: '',
+    url_path: '',
+    icon_name: '',
+    seo_title: '',
+    seo_h1: '',
+    seo_meta_description: '',
+    seo_keywords: '',
+    seo_canonical_url: '',
+    seo_google_snippet: '',
+    estimated_duration: ''
+  });
+
+  // Template function to copy data from existing exam
+  const createFromTemplate = (exam: ExamPage) => {
+    setTemplateExam(exam);
+    setSelectedTemplateId(exam.id.toString());
+    loadTemplateData(exam);
+    setShowCreateForm(true);
+  };
+
+  // Load template data into form
+  const loadTemplateData = (exam: ExamPage) => {
+    setNewExam({
+      exam_code: '', // Keep empty to force user to enter new code
+      exam_name: exam.exam_name + ' (Copy)',
+      vendor: exam.vendor || '',
+      is_active: exam.is_active,
+      is_featured: exam.is_featured,
+      difficulty_level: exam.difficulty_level || '',
+      display_order: exam.display_order?.toString() || '',
+      header_label: exam.header_label || '',
+      url_path: '', // Keep empty for new exam
+      icon_name: exam.icon_name || '',
+      seo_title: exam.seo_title || '',
+      seo_h1: exam.seo_h1 || '',
+      seo_meta_description: exam.seo_meta_description || '',
+      seo_keywords: exam.seo_keywords || '',
+      seo_canonical_url: '', // Keep empty for new exam
+      seo_google_snippet: exam.seo_google_snippet || '',
+      estimated_duration: exam.estimated_duration?.toString() || ''
+    });
+  };
+
+  // Handle template selection from dropdown
+  const handleTemplateSelection = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (templateId === '') {
+      setTemplateExam(null);
+      resetNew();
+    } else {
+      const exam = examPages.find(ep => ep.id.toString() === templateId);
+      if (exam) {
+        setTemplateExam(exam);
+        loadTemplateData(exam);
+      }
+    }
+  };
+
+  // Validate exam code uniqueness
+  const validateExamCode = (code: string) => {
+    if (!code.trim()) {
+      setCodeValidationError('');
+      return true;
+    }
+    
+    const exists = examPages.some((exam: ExamPage) => 
+      exam.exam_code.toLowerCase() === code.toLowerCase()
+    );
+    
+    if (exists) {
+      setCodeValidationError('Exam code already exists');
+      return false;
+    }
+    
+    setCodeValidationError('');
+    return true;
+  };
 
   const createExam = async () => {
     if(!newExam.exam_code.trim() || !newExam.exam_name.trim()) return;
+    
+    // Validate exam code uniqueness
+    if (!validateExamCode(newExam.exam_code)) {
+      return;
+    }
+    
     try {
       setCreating(true);
-      await onUpdate?.({ id: -1 }); // no-op to satisfy optional chain (not used)
-      const payload: any = { ...newExam, vendor: newExam.vendor||null };
-      // Use window event to request creation via dashboard if direct service not passed
+      
+      // Prepare payload with all fields
+      const payload: any = { 
+        exam_code: newExam.exam_code,
+        exam_name: newExam.exam_name,
+        vendor: newExam.vendor || null,
+        is_active: newExam.is_active,
+        is_featured: newExam.is_featured,
+        difficulty_level: newExam.difficulty_level || null,
+        display_order: newExam.display_order ? Number(newExam.display_order) : null,
+        header_label: newExam.header_label || null,
+        url_path: newExam.url_path || null,
+        icon_name: newExam.icon_name || null,
+        seo_title: newExam.seo_title || null,
+        seo_h1: newExam.seo_h1 || null,
+        seo_meta_description: newExam.seo_meta_description || null,
+        seo_keywords: newExam.seo_keywords || null,
+        seo_canonical_url: newExam.seo_canonical_url || null,
+        seo_google_snippet: newExam.seo_google_snippet || null,
+        estimated_duration: newExam.estimated_duration ? Number(newExam.estimated_duration) : null
+      };
+      
+      // Use window event to request creation via dashboard
       const evt = new CustomEvent('create-exam', { detail: payload });
       window.dispatchEvent(evt);
       resetNew();
+      setTemplateExam(null);
+      setSelectedTemplateId('');
+      setShowCreateForm(false);
     } catch(e){
       console.error('create exam failed', e);
     } finally { setCreating(false); }
@@ -127,33 +255,281 @@ export default function ExamsTable({ examPages, loading, onUpdate }: ExamsTableP
       </div>
 
       {showCreateForm && (
-        <div className="border border-zinc-700 bg-zinc-900/70 rounded p-4 space-y-3 text-xs">
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <input placeholder="Exam Code" value={newExam.exam_code} onChange={e=>setNewExam(n=>({...n, exam_code:e.target.value.toUpperCase()}))} className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1" />
-            <input placeholder="Exam Name" value={newExam.exam_name} onChange={e=>setNewExam(n=>({...n, exam_name:e.target.value}))} className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1" />
-            <input placeholder="Vendor" value={newExam.vendor} onChange={e=>setNewExam(n=>({...n, vendor:e.target.value}))} className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1" />
-            {/* Active toggle pill group */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase text-zinc-400 tracking-wide">Active</span>
-              <div className="inline-flex rounded-md overflow-hidden border border-zinc-600">
-                <button type="button" aria-pressed={newExam.is_active} onClick={()=>setNewExam(n=>({...n,is_active:true}))} className={`px-2 py-1 text-xs font-medium ${newExam.is_active ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>Yes</button>
-                <button type="button" aria-pressed={!newExam.is_active} onClick={()=>setNewExam(n=>({...n,is_active:false}))} className={`px-2 py-1 text-xs font-medium ${!newExam.is_active ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>No</button>
+        <div className="border border-zinc-700 bg-zinc-900/70 rounded p-4 space-y-4 text-xs">
+          {/* Template Selection */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-white">Template Selection</h4>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Use Existing Exam as Template</label>
+                <select 
+                  value={selectedTemplateId} 
+                  onChange={e => handleTemplateSelection(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-sm"
+                >
+                  <option value="">Start from scratch</option>
+                  {examPages
+                    .sort((a, b) => a.exam_code.localeCompare(b.exam_code))
+                    .map(ep => (
+                    <option key={ep.id} value={ep.id.toString()}>
+                      {ep.exam_code} - {ep.exam_name} {ep.vendor ? `(${ep.vendor})` : ''} {!ep.is_active ? ' [INACTIVE]' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-zinc-500">
+                  Wähle ein beliebiges Exam als Vorlage (aktiv oder inaktiv) oder erstelle ein neues von Grund auf
+                </p>
               </div>
-            </div>
-            {/* Featured toggle pill group */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase text-zinc-400 tracking-wide">Featured</span>
-              <div className="inline-flex rounded-md overflow-hidden border border-zinc-600">
-                <button type="button" aria-pressed={newExam.is_featured} onClick={()=>setNewExam(n=>({...n,is_featured:true}))} className={`px-2 py-1 text-xs font-medium transition-colors ${newExam.is_featured ? 'bg-yellow-500 text-black shadow-inner' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>Yes</button>
-                <button type="button" aria-pressed={!newExam.is_featured} onClick={()=>setNewExam(n=>({...n,is_featured:false}))} className={`px-2 py-1 text-xs font-medium transition-colors ${!newExam.is_featured ? 'bg-zinc-700 text-zinc-200' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>No</button>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={createExam} disabled={!newExam.exam_code || !newExam.exam_name || creating} className="flex-1 px-3 py-1 rounded bg-green-600 hover:bg-green-500 disabled:opacity-40">{creating? 'Saving...' : 'Save'}</button>
-              <button onClick={()=>{ resetNew(); setShowCreateForm(false); }} type="button" className="px-3 py-1 rounded bg-zinc-700 hover:bg-zinc-600">X</button>
+              {templateExam && (
+                <div className="space-y-1">
+                  <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Template Preview</label>
+                  <div className="p-2 bg-blue-900/30 border border-blue-700 rounded text-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2v0M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                      </svg>
+                      <span className="text-blue-400 font-medium">{templateExam.exam_code}</span>
+                      {!templateExam.is_active && (
+                        <span className="px-1.5 py-0.5 bg-red-900/50 text-red-300 text-[10px] rounded">INACTIVE</span>
+                      )}
+                    </div>
+                    <p className="text-zinc-300">{templateExam.exam_name}</p>
+                    {templateExam.vendor && <p className="text-zinc-400 text-xs">Vendor: {templateExam.vendor}</p>}
+                    <button 
+                      onClick={() => handleTemplateSelection('')} 
+                      className="mt-2 px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs"
+                    >
+                      Clear Template
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-          <p className="text-[10px] text-zinc-500">Provide at least code & name. Code will be uppercased.</p>
+
+          {/* Template info */}
+          {templateExam && (
+            <div className="flex items-center gap-2 p-2 bg-blue-900/20 border border-blue-700/50 rounded">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-blue-400 text-xs">
+                Daten von <strong>{templateExam.exam_code}</strong> werden als Vorlage verwendet. 
+                Passe sie nach Bedarf an.
+              </span>
+            </div>
+          )}
+
+          {/* Basic Information */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-white">Basic Information</h4>
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Exam Code *</label>
+                <input 
+                  placeholder="e.g. AZ-900" 
+                  value={newExam.exam_code} 
+                  onChange={e=>{
+                    const code = e.target.value.toUpperCase();
+                    setNewExam(n=>({...n, exam_code: code}));
+                    validateExamCode(code);
+                  }} 
+                  className={`w-full bg-zinc-800 border rounded px-2 py-1 ${codeValidationError ? 'border-red-500' : 'border-zinc-600'}`} 
+                />
+                {codeValidationError && <p className="text-red-400 text-[10px]">{codeValidationError}</p>}
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Exam Name *</label>
+                <input 
+                  placeholder="e.g. Azure Fundamentals" 
+                  value={newExam.exam_name} 
+                  onChange={e=>setNewExam(n=>({...n, exam_name:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Vendor</label>
+                <input 
+                  placeholder="e.g. Microsoft" 
+                  value={newExam.vendor} 
+                  onChange={e=>setNewExam(n=>({...n, vendor:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Difficulty</label>
+                <input 
+                  placeholder="e.g. Beginner" 
+                  value={newExam.difficulty_level} 
+                  onChange={e=>setNewExam(n=>({...n, difficulty_level:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Settings */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-white">Settings</h4>
+            <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase text-zinc-400 tracking-wide">Active</span>
+                <div className="inline-flex rounded-md overflow-hidden border border-zinc-600">
+                  <button type="button" onClick={()=>setNewExam(n=>({...n,is_active:true}))} className={`px-2 py-1 text-xs font-medium ${newExam.is_active ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>Yes</button>
+                  <button type="button" onClick={()=>setNewExam(n=>({...n,is_active:false}))} className={`px-2 py-1 text-xs font-medium ${!newExam.is_active ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>No</button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase text-zinc-400 tracking-wide">Featured</span>
+                <div className="inline-flex rounded-md overflow-hidden border border-zinc-600">
+                  <button type="button" onClick={()=>setNewExam(n=>({...n,is_featured:true}))} className={`px-2 py-1 text-xs font-medium transition-colors ${newExam.is_featured ? 'bg-yellow-500 text-black shadow-inner' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>Yes</button>
+                  <button type="button" onClick={()=>setNewExam(n=>({...n,is_featured:false}))} className={`px-2 py-1 text-xs font-medium transition-colors ${!newExam.is_featured ? 'bg-zinc-700 text-zinc-200' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>No</button>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Display Order</label>
+                <input 
+                  type="number" 
+                  placeholder="e.g. 1" 
+                  value={newExam.display_order} 
+                  onChange={e=>setNewExam(n=>({...n, display_order:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Duration (min)</label>
+                <input 
+                  type="number" 
+                  placeholder="e.g. 60" 
+                  value={newExam.estimated_duration} 
+                  onChange={e=>setNewExam(n=>({...n, estimated_duration:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Page Details */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-white">Page Details</h4>
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Header Label</label>
+                <input 
+                  placeholder="e.g. Azure Fundamentals Exam" 
+                  value={newExam.header_label} 
+                  onChange={e=>setNewExam(n=>({...n, header_label:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">URL Path</label>
+                <input 
+                  placeholder="e.g. /exams/az-900" 
+                  value={newExam.url_path} 
+                  onChange={e=>setNewExam(n=>({...n, url_path:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Icon Name</label>
+                <input 
+                  placeholder="e.g. microsoft" 
+                  value={newExam.icon_name} 
+                  onChange={e=>setNewExam(n=>({...n, icon_name:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* SEO Fields */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-white">SEO Settings</h4>
+            <div className="grid gap-3">
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">SEO Title</label>
+                <input 
+                  placeholder="e.g. AZ-900 Azure Fundamentals Practice Questions" 
+                  value={newExam.seo_title} 
+                  onChange={e=>setNewExam(n=>({...n, seo_title:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">SEO H1</label>
+                <input 
+                  placeholder="e.g. Master the AZ-900 Azure Fundamentals Exam" 
+                  value={newExam.seo_h1} 
+                  onChange={e=>setNewExam(n=>({...n, seo_h1:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Meta Description</label>
+                <textarea 
+                  placeholder="Practice AZ-900 Azure Fundamentals with our comprehensive exam questions..." 
+                  value={newExam.seo_meta_description} 
+                  onChange={e=>setNewExam(n=>({...n, seo_meta_description:e.target.value}))} 
+                  rows={2}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">SEO Keywords</label>
+                  <textarea 
+                    placeholder="azure, fundamentals, az-900, cloud, microsoft" 
+                    value={newExam.seo_keywords} 
+                    onChange={e=>setNewExam(n=>({...n, seo_keywords:e.target.value}))} 
+                    rows={2}
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Google Snippet</label>
+                  <textarea 
+                    placeholder="Free AZ-900 practice questions. Prepare for Azure Fundamentals..." 
+                    value={newExam.seo_google_snippet} 
+                    onChange={e=>setNewExam(n=>({...n, seo_google_snippet:e.target.value}))} 
+                    rows={2}
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase text-zinc-400 tracking-wide">Canonical URL</label>
+                <input 
+                  placeholder="e.g. https://example.com/exams/az-900" 
+                  value={newExam.seo_canonical_url} 
+                  onChange={e=>setNewExam(n=>({...n, seo_canonical_url:e.target.value}))} 
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1" 
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 pt-3 border-t border-zinc-700">
+            <button 
+              onClick={createExam} 
+              disabled={!newExam.exam_code || !newExam.exam_name || creating || !!codeValidationError} 
+              className="flex-1 px-3 py-2 rounded bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+            >
+              {creating ? 'Creating...' : 'Create Exam'}
+            </button>
+            <button 
+              onClick={()=>{ resetNew(); setTemplateExam(null); setSelectedTemplateId(''); setShowCreateForm(false); setCodeValidationError(''); }} 
+              type="button" 
+              className="px-4 py-2 rounded bg-zinc-700 hover:bg-zinc-600 text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+          <p className="text-[10px] text-zinc-500 pt-1">
+            Fields marked with * are required. Exam code must be unique.
+            {templateExam && ` Template data from "${templateExam.exam_code}" has been pre-filled - modify as needed.`}
+          </p>
         </div>
       )}
 
@@ -216,8 +592,17 @@ export default function ExamsTable({ examPages, loading, onUpdate }: ExamsTableP
                   ) : (ep.display_order ?? '-')}</td>
                   <td className="px-4 py-2 text-zinc-400">{ep.question_count ?? 0}</td>
                   <td className="px-4 py-2 text-zinc-400 whitespace-nowrap text-xs">{ep.updated_at ? new Date(ep.updated_at).toLocaleDateString() : '-'}</td>
-                  <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
+                  <td className="px-4 py-2 text-right space-x-1 whitespace-nowrap">
                     <button onClick={()=>toggleExpand(ep)} className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-xs rounded">{isExpanded ? 'Close' : 'SEO'}</button>
+                    {!isEditing && (
+                      <button 
+                        onClick={()=>createFromTemplate(ep)} 
+                        className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-xs rounded"
+                        title="Use as template for new exam"
+                      >
+                        Copy
+                      </button>
+                    )}
                     {isEditing ? (
                       <>
                         <button onClick={commit} className="px-2 py-1 bg-green-600 hover:bg-green-500 text-xs rounded">Save</button>

@@ -82,3 +82,89 @@ export interface CompetitorAnalysis {
   created_at: string;
   updated_at: string;
 }
+
+export interface Knowledge {
+  id: number;
+  title: string;
+  description?: string | null;
+  content?: string | null;
+  category?: string | null;
+  tags?: string[] | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+  file_path?: string | null;
+  document_type: string;
+  word_count: number;
+  reading_time_minutes: number;
+}
+
+export interface KnowledgeChunk {
+  id: number;
+  knowledge_id: number;
+  title?: string;
+  content: string;
+  chunk_type: 'text' | 'code' | 'image' | 'table' | 'list';
+  chunk_order: number;
+  word_count: number;
+  tokens: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// User Management Types
+export interface AppUser {
+  id: string;
+  email: string;
+  name?: string;
+  role: 'admin' | 'editor' | 'contributor' | 'user';
+  status: 'active' | 'inactive';
+  created_at: string;
+  last_login?: string;
+  avatar_url?: string;
+  email_confirmed_at?: string;
+}
+
+export interface UserProfile {
+  idx: number;
+  id: string;
+  email: string;
+  full_name?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  role: 'user' | 'admin' | 'superadmin';
+  approved_by?: string | null;
+  approved_at?: string | null;
+  rejection_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+  is_approved: boolean;
+}
+
+export interface KnowledgeWithChunks extends Knowledge {
+  chunks?: KnowledgeChunk[];
+}
+
+// Task Management Types for PMI Kanban Board
+export interface Task {
+  id: string;
+  title: string;
+  description?: string | null;
+  author_id: string;
+  assignee_id?: string | null;
+  status: 'idea' | 'demand' | 'in-progress' | 'done';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  question_count: number;
+  exam_code?: string | null;
+  category?: string | null;
+  difficulty: 'beginner' | 'intermediate' | 'advanced' | 'mixed';
+  due_date?: string | null;
+  tags?: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskWithProfiles extends Task {
+  author: UserProfile;
+  assignee?: UserProfile | null;
+}
