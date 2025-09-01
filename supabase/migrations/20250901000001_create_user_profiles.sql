@@ -1,14 +1,21 @@
--- Create user_profiles table for managing user permissions
+-- Create approval status enum for better data integrity
+CREATE TYPE approval_status AS ENUM ('pending', 'approved', 'rejected');
+
+-- Create user_profiles table for managing user permissions and approvals
 CREATE TABLE IF NOT EXISTS user_profiles (
-  id UUID REFERENCES auth.users(id) PRIMARY KEY,
+  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email TEXT NOT NULL,
-  is_approved BOOLEAN DEFAULT FALSE,
+  status approval_status NOT NULL DEFAULT 'pending',
   role TEXT DEFAULT 'user',
   approved_by UUID REFERENCES auth.users(id),
   approved_at TIMESTAMP WITH TIME ZONE,
+  rejection_reason TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- For backwards compatibility, add a computed column
+ALTER TABLE user_profiles ADD COLUMN is_approved BOOLEAN GENERATED ALWAYS AS (status = 'approved') STORED;
 
 -- Create indexes
 CREATE INDEX IF NOT EXISTS user_profiles_email_idx ON user_profiles(email);
@@ -60,8 +67,8 @@ CREATE POLICY "Admins can insert profiles" ON user_profiles
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO user_profiles (id, email, is_approved, role)
-  VALUES (NEW.id, NEW.email, FALSE, 'user');
+  INSERT INTO user_profiles (id, email, status, role)
+  VALUES (NEW.id, NEW.email, 'pending', 'user');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
