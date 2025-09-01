@@ -40,7 +40,18 @@ export interface Question {
 
 export interface Answer {
   text: string;
-  isCorrect: boolean;
+  is_correct: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  is_approved: boolean;
+  role: 'user' | 'admin' | 'super_admin';
+  approved_by?: string;
+  approved_at?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ExamCategory {

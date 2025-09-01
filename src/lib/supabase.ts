@@ -32,7 +32,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
   }
 });
 
@@ -719,6 +721,96 @@ export const dbService = {
       return data || [];
     } catch (e) {
       console.error('semanticSearch error:', e);
+      throw e;
+    }
+  },
+
+  // User Profile Management
+  async getUserProfiles() {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(`Error fetching user profiles: ${error.message}`);
+      return data || [];
+    } catch (e) {
+      console.error('getUserProfiles error:', e);
+      throw e;
+    }
+  },
+
+  async approveUser(userId: string, approvedBy: string) {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({
+          is_approved: true,
+          approved_by: approvedBy,
+          approved_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+      if (error) throw new Error(`Error approving user: ${error.message}`);
+      return data;
+    } catch (e) {
+      console.error('approveUser error:', e);
+      throw e;
+    }
+  },
+
+  async revokeApproval(userId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({
+          is_approved: false,
+          approved_by: null,
+          approved_at: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+      if (error) throw new Error(`Error revoking approval: ${error.message}`);
+      return data;
+    } catch (e) {
+      console.error('revokeApproval error:', e);
+      throw e;
+    }
+  },
+
+  async deleteUserProfile(userId: string) {
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .delete()
+        .eq('id', userId);
+      if (error) throw new Error(`Error deleting user profile: ${error.message}`);
+      return true;
+    } catch (e) {
+      console.error('deleteUserProfile error:', e);
+      throw e;
+    }
+  },
+
+  async updateUserRole(userId: string, role: 'user' | 'admin' | 'super_admin') {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({
+          role,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+      if (error) throw new Error(`Error updating user role: ${error.message}`);
+      return data;
+    } catch (e) {
+      console.error('updateUserRole error:', e);
       throw e;
     }
   },
