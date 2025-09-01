@@ -957,7 +957,7 @@ export const dbService = {
   async getUsers() {
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('user_profile')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -972,7 +972,7 @@ export const dbService = {
   async getUserById(id: string) {
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('user_profile')
         .select('*')
         .eq('id', id)
         .single();
@@ -988,7 +988,7 @@ export const dbService = {
   async updateUser(id: string, payload: Partial<UserProfile>) {
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('user_profile')
         .update(payload)
         .eq('id', id)
         .select('*')
@@ -1005,7 +1005,7 @@ export const dbService = {
   async deleteUser(id: string) {
     try {
       const { error } = await supabase
-        .from('user_profiles')
+        .from('user_profile')
         .delete()
         .eq('id', id);
 
@@ -1051,7 +1051,7 @@ export const dbService = {
   async getPendingUsers() {
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('user_profile')
         .select('*')
         .eq('status', 'pending')
         .order('created_at', { ascending: true });
@@ -1135,7 +1135,7 @@ export const dbService = {
       
       // Force a fresh fetch from the database
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('user_profile')
         .select('*')
         .eq('id', user.id)
         .single();

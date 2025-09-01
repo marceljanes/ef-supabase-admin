@@ -49,7 +49,7 @@ export default function SimpleAuth() {
   const loadProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('user_profile')
         .select('*')
         .eq('id', userId)
         .single();
