@@ -152,7 +152,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             <h1 className="text-xl font-bold text-white mb-2">Account Pending Approval</h1>
             <p className="text-zinc-400 mb-4">
               Your account ({user.email}) is waiting for admin approval. 
-              You'll be able to access the admin panel once approved.
+              You&apos;ll be able to access the admin panel once approved.
             </p>
             <p className="text-sm text-zinc-500 mb-6">
               Status: <span className="text-amber-400 font-medium">{userProfile.status}</span>
