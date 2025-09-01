@@ -78,22 +78,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const checkAuth = async () => {
     try {
-      const currentUser = await dbService.getCurrentUser();
-      if (currentUser) {
-        const profile = await dbService.getCurrentUserProfile();
-        console.log('Current user profile:', profile);
-        if (profile && profile.status === 'approved') {
-          setUser(currentUser);
-          setUserProfile(profile);
-        } else {
-          // User exists but not approved, show pending state
-          setUser(currentUser);
-          setUserProfile(profile);
-        }
-      }
+      console.log('Starting auth check...');
+      
+      // Add timeout to prevent infinite loading
+      const authPromise = Promise.race([
+        (async () => {
+          const currentUser = await dbService.getCurrentUser();
+          console.log('Current user:', currentUser?.email);
+          
+          if (currentUser) {
+            const profile = await dbService.getCurrentUserProfile();
+            console.log('Current user profile:', profile);
+            if (profile && profile.status === 'approved') {
+              setUser(currentUser);
+              setUserProfile(profile);
+            } else {
+              // User exists but not approved, show pending state
+              setUser(currentUser);
+              setUserProfile(profile);
+            }
+          } else {
+            console.log('No current user found');
+          }
+        })(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Auth check timeout')), 10000)
+        )
+      ]);
+      
+      await authPromise;
+      console.log('Auth check completed');
     } catch (error) {
       console.error('Auth check failed:', error);
+      // On error, still proceed to show the app (might be network issue)
     } finally {
+      console.log('Setting loading to false');
       setLoading(false);
     }
   };

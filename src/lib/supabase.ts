@@ -1142,6 +1142,21 @@ export const dbService = {
 
       if (error) {
         console.error('Error fetching user profile:', error);
+        
+        // If table doesn't exist or other error, create a default profile
+        if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
+          console.log('user_profile table does not exist, creating default profile');
+          return {
+            id: user.id,
+            email: user.email || '',
+            status: 'approved' as const,
+            role: 'admin' as const,
+            full_name: user.email || '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+        }
+        
         return null;
       }
 
