@@ -957,7 +957,7 @@ export const dbService = {
   async getUsers() {
     try {
       const { data, error } = await supabase
-        .from('user_profile')
+        .from('user_profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -972,7 +972,7 @@ export const dbService = {
   async getUserById(id: string) {
     try {
       const { data, error } = await supabase
-        .from('user_profile')
+        .from('user_profiles')
         .select('*')
         .eq('id', id)
         .single();
@@ -988,7 +988,7 @@ export const dbService = {
   async updateUser(id: string, payload: Partial<UserProfile>) {
     try {
       const { data, error } = await supabase
-        .from('user_profile')
+        .from('user_profiles')
         .update(payload)
         .eq('id', id)
         .select('*')
@@ -1005,7 +1005,7 @@ export const dbService = {
   async deleteUser(id: string) {
     try {
       const { error } = await supabase
-        .from('user_profile')
+        .from('user_profiles')
         .delete()
         .eq('id', id);
 
@@ -1051,7 +1051,7 @@ export const dbService = {
   async getPendingUsers() {
     try {
       const { data, error } = await supabase
-        .from('user_profile')
+        .from('user_profiles')
         .select('*')
         .eq('status', 'pending')
         .order('created_at', { ascending: true });
@@ -1135,7 +1135,7 @@ export const dbService = {
       
       // Force a fresh fetch from the database
       const { data, error } = await supabase
-        .from('user_profile')
+        .from('user_profiles')
         .select('*')
         .eq('id', user.id)
         .single();
@@ -1145,7 +1145,7 @@ export const dbService = {
         
         // If table doesn't exist or other error, create a default profile
         if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
-          console.log('user_profile table does not exist, creating default profile');
+          console.log('user_profiles table does not exist, creating default profile');
           return {
             id: user.id,
             email: user.email || '',
@@ -1199,16 +1199,50 @@ export const dbService = {
     tags?: string[];
   }) {
     try {
+      console.log('=== CREATE TASK DEBUG (dbService) ===');
+      console.log('Input task data:', task);
+      
+      // Get the authenticated user (for the ID)
       const user = await this.getCurrentUser();
-      if (!user) throw new Error('User not authenticated');
+      console.log('Current auth user:', user);
+      
+      if (!user) {
+        console.error('User not authenticated');
+        throw new Error('User not authenticated');
+      }
+
+      // Get the user profile (for role/status checks)
+      const userProfile = await this.getCurrentUserProfile();
+      console.log('Current user profile:', userProfile);
+      
+      if (!userProfile) {
+        throw new Error('User profile not found');
+      }
+
+      // Check if user has permission to create tasks
+      const canCreateTasks = (userProfile.role === 'admin' || userProfile.role === 'superadmin') && 
+                            userProfile.status === 'approved';
+      
+      console.log('Can create tasks?', canCreateTasks, {
+        role: userProfile.role,
+        status: userProfile.status
+      });
+
+      if (!canCreateTasks) {
+        throw new Error('Insufficient permissions to create tasks');
+      }
+
+      const taskToInsert = {
+        ...task,
+        author_id: user.id,
+        status: 'idea'
+      };
+      
+      console.log('Task to insert:', taskToInsert);
 
       const { data, error } = await supabase
         .from('tasks')
-        .insert({
-          ...task,
-          author_id: user.id,
-          status: 'idea'
-        })
+        .insert(taskToInsert)
         .select(`
           *,
           author:author_id(id, email, full_name),
@@ -1216,7 +1250,14 @@ export const dbService = {
         `)
         .single();
 
-      if (error) throw new Error(error.message);
+      console.log('Supabase insert result:', { data, error });
+
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw new Error(error.message);
+      }
+      
+      console.log('Task created successfully:', data);
       return data;
     } catch (e) {
       console.error('createTask error:', e);

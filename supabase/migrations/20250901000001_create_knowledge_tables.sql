@@ -133,21 +133,21 @@ CREATE POLICY "Anyone can view knowledge" ON knowledge FOR SELECT USING (true);
 -- Only admins can insert, update, or delete knowledge documents
 CREATE POLICY "Admins can insert knowledge" ON knowledge FOR INSERT WITH CHECK (
     EXISTS (
-        SELECT 1 FROM user_profile 
+        SELECT 1 FROM user_profiles 
         WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
     )
 );
 
 CREATE POLICY "Admins can update knowledge" ON knowledge FOR UPDATE USING (
     EXISTS (
-        SELECT 1 FROM user_profile 
+        SELECT 1 FROM user_profiles 
         WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
     )
 );
 
 CREATE POLICY "Admins can delete knowledge" ON knowledge FOR DELETE USING (
     EXISTS (
-        SELECT 1 FROM user_profile 
+        SELECT 1 FROM user_profiles 
         WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
     )
 );
@@ -159,21 +159,21 @@ CREATE POLICY "Anyone can view knowledge chunks" ON knowledge_chunks FOR SELECT 
 -- Only admins can insert, update, or delete knowledge chunks
 CREATE POLICY "Admins can insert knowledge chunks" ON knowledge_chunks FOR INSERT WITH CHECK (
     EXISTS (
-        SELECT 1 FROM user_profile 
+        SELECT 1 FROM user_profiles 
         WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
     )
 );
 
 CREATE POLICY "Admins can update knowledge chunks" ON knowledge_chunks FOR UPDATE USING (
     EXISTS (
-        SELECT 1 FROM user_profile 
+        SELECT 1 FROM user_profiles 
         WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
     )
 );
 
 CREATE POLICY "Admins can delete knowledge chunks" ON knowledge_chunks FOR DELETE USING (
     EXISTS (
-        SELECT 1 FROM user_profile 
+        SELECT 1 FROM user_profiles 
         WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
     )
 );

@@ -3,8 +3,8 @@ CREATE TABLE tasks (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT,
-    author_id UUID NOT NULL REFERENCES user_profile(id) ON DELETE CASCADE,
-    assignee_id UUID REFERENCES user_profile(id) ON DELETE SET NULL,
+    author_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+    assignee_id UUID REFERENCES user_profiles(id) ON DELETE SET NULL,
     status TEXT NOT NULL DEFAULT 'idea' CHECK (status IN ('idea', 'demand', 'in-progress', 'done')),
     priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
     question_count INTEGER DEFAULT 10,
@@ -44,7 +44,7 @@ CREATE POLICY "Anyone can view tasks" ON tasks FOR SELECT USING (true);
 -- Only admins can insert tasks
 CREATE POLICY "Admins can insert tasks" ON tasks FOR INSERT WITH CHECK (
     EXISTS (
-        SELECT 1 FROM user_profile 
+        SELECT 1 FROM user_profiles 
         WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
     )
 );
@@ -52,7 +52,7 @@ CREATE POLICY "Admins can insert tasks" ON tasks FOR INSERT WITH CHECK (
 -- Only admins can update tasks
 CREATE POLICY "Admins can update tasks" ON tasks FOR UPDATE USING (
     EXISTS (
-        SELECT 1 FROM user_profile 
+        SELECT 1 FROM user_profiles 
         WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
     )
 );
@@ -60,7 +60,7 @@ CREATE POLICY "Admins can update tasks" ON tasks FOR UPDATE USING (
 -- Only admins can delete tasks
 CREATE POLICY "Admins can delete tasks" ON tasks FOR DELETE USING (
     EXISTS (
-        SELECT 1 FROM user_profile 
+        SELECT 1 FROM user_profiles 
         WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
     )
 );

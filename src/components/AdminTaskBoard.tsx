@@ -33,7 +33,18 @@ export default function AdminTaskBoard() {
   const [updating, setUpdating] = useState(false);
 
   // Check if current user is admin
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isAdmin = currentUser && 
+                 (currentUser.role === 'admin' || currentUser.role === 'superadmin') && 
+                 currentUser.status === 'approved';
+  
+  // Debug logging
+  console.log('AdminTaskBoard Debug:', {
+    currentUser: currentUser,
+    userRole: currentUser?.role,
+    userStatus: currentUser?.status,
+    isAdmin: isAdmin,
+    loading: loading
+  });
 
   const [newTask, setNewTask] = useState({
     title: '',
@@ -52,9 +63,10 @@ export default function AdminTaskBoard() {
       try {
         setLoading(true);
         
-        // Fetch current user
-        const user = await dbService.getCurrentUser();
-        setCurrentUser(user);
+        // Fetch current user profile (includes role/status)
+        const userProfile = await dbService.getCurrentUserProfile();
+        console.log('Fetched user profile:', userProfile);
+        setCurrentUser(userProfile);
         
         // Fetch users for assignee dropdown
         const profiles = await dbService.getUsers();
@@ -130,11 +142,22 @@ export default function AdminTaskBoard() {
   };
 
   const createTask = async () => {
-    if (!newTask.title) return;
+    console.log('=== CREATE TASK DEBUG ===');
+    console.log('newTask.title:', newTask.title);
+    console.log('currentUser:', currentUser);
+    console.log('isAdmin:', isAdmin);
+    console.log('newTask data:', newTask);
+    
+    if (!newTask.title) {
+      console.log('No title provided, returning early');
+      return;
+    }
 
     try {
       setCreating(true);
       setError(null);
+      
+      console.log('About to call dbService.createTask...');
       
       const createdTask = await dbService.createTask({
         title: newTask.title,
@@ -146,6 +169,8 @@ export default function AdminTaskBoard() {
         due_date: newTask.due_date || undefined,
         tags: newTask.tags.length > 0 ? newTask.tags : undefined
       });
+
+      console.log('Task created successfully:', createdTask);
 
       // Add to local state
       setColumns(prev => prev.map(col => 

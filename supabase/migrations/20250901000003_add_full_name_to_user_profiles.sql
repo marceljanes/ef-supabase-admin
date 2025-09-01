@@ -1,8 +1,8 @@
--- Add full_name column to user_profile table
-ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS full_name TEXT;
+-- Add full_name column to user_profiles table
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS full_name TEXT;
 
 -- Update existing records to use email as full_name where full_name is null
-UPDATE user_profile 
+UPDATE user_profiles 
 SET full_name = email 
 WHERE full_name IS NULL OR full_name = '';
 
@@ -18,9 +18,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create trigger for user_profile table to auto-set full_name
+-- Create trigger for user_profiles table to auto-set full_name
 CREATE OR REPLACE TRIGGER set_full_name_trigger
-    BEFORE INSERT OR UPDATE ON user_profile
+    BEFORE INSERT OR UPDATE ON user_profiles
     FOR EACH ROW EXECUTE FUNCTION set_full_name_from_email();
 
 -- Create trigger for UPDATE operations (in case email changes)

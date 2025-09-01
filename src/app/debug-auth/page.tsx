@@ -20,7 +20,7 @@ export default function DebugAuth() {
       if (session?.user) {
         // Get profile directly from database
         const { data: profile, error: profileError } = await supabase
-          .from('user_profile')
+          .from('user_profiles')
           .select('*')
           .eq('id', session.user.id)
           .single();
