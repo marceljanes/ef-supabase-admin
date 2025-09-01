@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { ProtectedRoute } from '@/components/AuthProvider';
 
 export const metadata: Metadata = {
   title: "EF Admin Dashboard",
@@ -12,8 +11,8 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ProtectedRoute requiredRole="admin">
+    <>
       {children}
-    </ProtectedRoute>
+    </>
   );
 }

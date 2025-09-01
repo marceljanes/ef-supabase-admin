@@ -31,90 +31,48 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
+  // Fix hydration issues by waiting for client-side mount
   useEffect(() => {
-    checkAuth();
+    setMounted(true);
+  }, []);
+
+  const checkAuth = async () => {
+    if (!mounted) return;
     
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: any, session: any) => {
-        console.log('Auth state changed:', event, session?.user?.email);
-        if (event === 'SIGNED_IN' && session?.user) {
+    try {
+      // Reduced timeout to 3 seconds for faster loading
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Auth check timeout')), 3000)
+      );
+      
+      const authPromise = (async () => {
+        const authUser = await dbService.getCurrentUser();
+        
+        if (authUser) {
           const profile = await dbService.getCurrentUserProfile();
-          console.log('Profile after sign in:', profile);
-          if (profile && profile.status === 'approved') {
-            setUser(session.user);
-            setUserProfile(profile);
-          } else {
-            console.log('User not approved, showing pending state');
-            setUser(session.user);
-            setUserProfile(profile);
-          }
-        } else if (event === 'SIGNED_OUT') {
+          setUser(authUser);
+          setUserProfile(profile);
+        } else {
           setUser(null);
           setUserProfile(null);
         }
-        setLoading(false);
-      }
-    );
-
-    // Check user status every 30 seconds if user is pending
-    const statusCheckInterval = setInterval(async () => {
-      if (user && userProfile && userProfile.status === 'pending') {
-        console.log('Checking user status...');
-        const updatedProfile = await dbService.getCurrentUserProfile();
-        console.log('Updated profile:', updatedProfile);
-        if (updatedProfile && updatedProfile.status !== userProfile.status) {
-          setUserProfile(updatedProfile);
-        }
-      }
-    }, 30000); // Check every 30 seconds
-
-    return () => {
-      subscription.unsubscribe();
-      clearInterval(statusCheckInterval);
-    };
-  }, [user, userProfile]);
-
-  const checkAuth = async () => {
-    try {
-      console.log('Starting auth check...');
+      })();
       
-      // Add timeout to prevent infinite loading
-      const authPromise = Promise.race([
-        (async () => {
-          const currentUser = await dbService.getCurrentUser();
-          console.log('Current user:', currentUser?.email);
-          
-          if (currentUser) {
-            const profile = await dbService.getCurrentUserProfile();
-            console.log('Current user profile:', profile);
-            if (profile && profile.status === 'approved') {
-              setUser(currentUser);
-              setUserProfile(profile);
-            } else {
-              // User exists but not approved, show pending state
-              setUser(currentUser);
-              setUserProfile(profile);
-            }
-          } else {
-            console.log('No current user found');
-          }
-        })(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Auth check timeout')), 10000)
-        )
-      ]);
+      await Promise.race([authPromise, timeoutPromise]);
       
-      await authPromise;
-      console.log('Auth check completed');
     } catch (error) {
       console.error('Auth check failed:', error);
-      // On error, still proceed to show the app (might be network issue)
+      setUser(null);
+      setUserProfile(null);
     } finally {
-      console.log('Setting loading to false');
       setLoading(false);
     }
+  };
+
+  const refreshAuth = async () => {
+    await checkAuth();
   };
 
   const signOut = async () => {
@@ -123,14 +81,46 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(null);
       setUserProfile(null);
     } catch (error) {
-      console.error('Sign out failed:', error);
+      console.error('Error signing out:', error);
     }
   };
 
-  const refreshAuth = async () => {
-    setLoading(true);
-    await checkAuth();
-  };
+  useEffect(() => {
+    if (!mounted) return;
+
+    // Force loading to false after 2 seconds max
+    const maxLoadingTimeout = setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+
+    checkAuth().finally(() => {
+      clearTimeout(maxLoadingTimeout);
+    });
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event: any, session: any) => {
+        try {
+          if (event === 'SIGNED_IN' && session?.user) {
+            const profile = await dbService.getCurrentUserProfile();
+            setUser(session.user);
+            setUserProfile(profile);
+          } else if (event === 'SIGNED_OUT') {
+            setUser(null);
+            setUserProfile(null);
+          }
+        } catch (error) {
+          console.error('Error handling auth state change:', error);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(maxLoadingTimeout);
+    };
+  }, [mounted]);
 
   const value = {
     user,
@@ -140,77 +130,98 @@ export function AuthProvider({ children }: AuthProviderProps) {
     refreshAuth
   };
 
+  // Prevent hydration mismatch by not rendering until mounted
+  if (!mounted) {
+    return null;
+  }
+
+  // Show loading spinner for maximum 2 seconds
   if (loading) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-8 w-8 border border-zinc-600 border-t-white"></div>
-          <div className="text-zinc-400">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-gray-300">Loading...</p>
+          <p className="text-sm text-gray-500 mt-2">This should only take a moment</p>
         </div>
       </div>
     );
   }
 
-  if (!user || !userProfile) {
-    return <AuthForm onSuccess={checkAuth} />;
+  // Show auth form if no user
+  if (!user) {
+    return (
+      <AuthContext.Provider value={value}>
+        <AuthForm />
+      </AuthContext.Provider>
+    );
   }
 
-  // Show pending message if user is not approved
-  if (userProfile.status !== 'approved') {
+  // Show pending approval message
+  if (userProfile && userProfile.status === 'pending') {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6">
-            <div className="flex justify-center mb-4">
-              <div className="bg-amber-500/20 rounded-full p-3">
-                <svg className="h-8 w-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <AuthContext.Provider value={value}>
+        <div className="min-h-screen flex items-center justify-center bg-gray-900">
+          <div className="max-w-md mx-auto text-center p-8 bg-gray-800 rounded-lg shadow-lg">
+            <div className="mb-4">
+              <div className="w-16 h-16 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-            </div>
-            <h1 className="text-xl font-bold text-white mb-2">Account Pending Approval</h1>
-            <p className="text-zinc-400 mb-4">
-              Your account ({user.email}) is waiting for admin approval. 
-              You&apos;ll be able to access the admin panel once approved.
-            </p>
-            <p className="text-sm text-zinc-500 mb-6">
-              Status: <span className="text-amber-400 font-medium">{userProfile.status}</span>
-              <br />
-              <span className="text-xs">Your account will be automatically refreshed when approved.</span>
-            </p>
-            <div className="flex gap-2 justify-center">
-              <button
-                onClick={refreshAuth}
-                disabled={loading}
-                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-white rounded font-medium flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border border-zinc-400 border-t-white"></div>
-                    <span>Checking...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span>Check Now</span>
-                  </>
-                )}
-              </button>
+              <h2 className="text-2xl font-bold text-white mb-2">Approval Pending</h2>
+              <p className="text-gray-300 mb-4">
+                Your account is pending approval. Please wait for an administrator to approve your access.
+              </p>
+              <p className="text-sm text-gray-400 mb-6">
+                Email: {user.email}
+              </p>
               <button
                 onClick={signOut}
-                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded"
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
               >
                 Sign Out
               </button>
             </div>
           </div>
         </div>
-      </div>
+      </AuthContext.Provider>
     );
   }
 
+  // Show access denied for non-approved users
+  if (!userProfile || userProfile.status !== 'approved') {
+    return (
+      <AuthContext.Provider value={value}>
+        <div className="min-h-screen flex items-center justify-center bg-gray-900">
+          <div className="max-w-md mx-auto text-center p-8 bg-gray-800 rounded-lg shadow-lg">
+            <div className="mb-4">
+              <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
+              <p className="text-gray-300 mb-4">
+                Your account access has been denied or is not properly configured.
+              </p>
+              <p className="text-sm text-gray-400 mb-6">
+                Email: {user.email}
+              </p>
+              <button
+                onClick={signOut}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      </AuthContext.Provider>
+    );
+  }
+
+  // User is approved, show the app
   return (
     <AuthContext.Provider value={value}>
       {children}
@@ -218,39 +229,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 }
 
-interface ProtectedRouteProps {
-  children: React.ReactNode;
-  requiredRole?: 'user' | 'admin' | 'superadmin';
-}
-
-export function ProtectedRoute({ children, requiredRole = 'user' }: ProtectedRouteProps) {
-  const { userProfile } = useAuth();
-
-  if (!userProfile) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
-          <p className="text-zinc-400">You need to be logged in to access this page.</p>
-        </div>
-      </div>
-    );
-  }
-
-  const roleHierarchy = { user: 0, admin: 1, superadmin: 2 };
-  const userRoleLevel = roleHierarchy[userProfile.role] || 0;
-  const requiredRoleLevel = roleHierarchy[requiredRole] || 0;
-
-  if (userRoleLevel < requiredRoleLevel) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Insufficient Permissions</h1>
-          <p className="text-zinc-400">You need {requiredRole} role to access this page.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
-}
+export default AuthProvider;

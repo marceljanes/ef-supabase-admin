@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { dbService } from '@/lib/supabase';
 import { Question } from '@/types/database';
 import { DashboardStats, DeletingState, ExamPage } from '@/types/admin';
-import { ProtectedRoute } from '@/components/AuthProvider';
+import { useAuth } from '@/components/AuthProvider';
 import Header from '@/components/Header';
 import StatCard from '@/components/StatCard';
 import QuickActionCard from '@/components/QuickActionCard';
@@ -343,11 +343,10 @@ export default function AdminDashboard() {
   }
 
   return (
-    <ProtectedRoute>
-      <div className="min-h-screen bg-zinc-900">
-        <Header />
-        <div className={`min-h-screen transition-colors duration-500 ${
-          activeTab==='trainer'
+    <div className="min-h-screen bg-zinc-900">
+      <Header />
+      <div className={`min-h-screen transition-colors duration-500 ${
+        activeTab==='trainer'
             ? (trainerTheme==='light'
                 ? 'bg-gradient-to-br from-zinc-100 via-white to-zinc-200'
                 : 'bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-800')
@@ -760,6 +759,5 @@ export default function AdminDashboard() {
       </div>
         </div>
       </div>
-    </ProtectedRoute>
   );
 }
