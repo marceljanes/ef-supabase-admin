@@ -32,6 +32,9 @@ export default function AdminTaskBoard() {
   const [editTask, setEditTask] = useState<any>({});
   const [updating, setUpdating] = useState(false);
 
+  // Check if current user is admin
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
@@ -244,15 +247,17 @@ export default function AdminTaskBoard() {
               <h2 className="text-2xl font-bold text-white">Task Management Board</h2>
               <p className="text-zinc-400 text-sm">Manage question creation tasks and assignments</p>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white font-medium"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Task
-        </button>
+            {isAdmin && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white font-medium"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Task
+          </button>
+            )}
       </div>
 
       {/* Kanban Board */}
@@ -261,8 +266,8 @@ export default function AdminTaskBoard() {
           <div
             key={column.id}
             className="bg-zinc-900 border border-zinc-700 rounded-lg p-4"
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, column.id)}
+            onDragOver={isAdmin ? handleDragOver : undefined}
+            onDrop={isAdmin ? (e) => handleDrop(e, column.id) : undefined}
           >
             {/* Column Header */}
             <div className="flex items-center gap-3 mb-4">
@@ -278,27 +283,29 @@ export default function AdminTaskBoard() {
               {column.tasks.map(task => (
                 <div
                   key={task.id}
-                  draggable
-                  onDragStart={() => handleDragStart(task, column.id)}
-                  onClick={() => openEditModal(task)}
-                  className="bg-zinc-800 border border-zinc-600 rounded-lg p-3 cursor-pointer hover:bg-zinc-750 transition-colors"
+                  draggable={isAdmin}
+                  onDragStart={() => isAdmin ? handleDragStart(task, column.id) : undefined}
+                  onClick={() => isAdmin ? openEditModal(task) : null}
+                  className={`bg-zinc-800 border border-zinc-600 rounded-lg p-3 transition-colors ${isAdmin ? 'cursor-pointer hover:bg-zinc-750' : 'cursor-default'}`}
                 >
                   {/* Task Header */}
                   <div className="flex items-start justify-between mb-2">
                     <h4 className="font-medium text-white text-sm line-clamp-2 flex-1 pr-2">{task.title}</h4>
                     <div className="flex items-center gap-1 shrink-0">
                       <div className={`w-2 h-2 rounded-full ${priorityColors[task.priority]}`} />
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteTask(task.id, column.id);
-                        }}
-                        className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteTask(task.id, column.id);
+                          }}
+                          className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -525,7 +532,7 @@ export default function AdminTaskBoard() {
                   <input
                     type="text"
                     value={editTask.title}
-                    onChange={e => setEditTask(prev => ({ ...prev, title: e.target.value }))}
+                    onChange={e => setEditTask((prev: any) => ({ ...prev, title: e.target.value }))}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                     placeholder="e.g., AWS Security Questions"
                   />
@@ -534,7 +541,7 @@ export default function AdminTaskBoard() {
                   <label className="block text-sm font-medium text-zinc-300 mb-2">Assignee</label>
                   <select
                     value={editTask.assignee_id}
-                    onChange={e => setEditTask(prev => ({ ...prev, assignee_id: e.target.value }))}
+                    onChange={e => setEditTask((prev: any) => ({ ...prev, assignee_id: e.target.value }))}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                   >
                     <option value="">Select assignee...</option>
@@ -549,7 +556,7 @@ export default function AdminTaskBoard() {
                 <label className="block text-sm font-medium text-zinc-300 mb-2">Description</label>
                 <textarea
                   value={editTask.description}
-                  onChange={e => setEditTask(prev => ({ ...prev, description: e.target.value }))}
+                  onChange={e => setEditTask((prev: any) => ({ ...prev, description: e.target.value }))}
                   className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                   rows={3}
                   placeholder="Task description..."
@@ -561,7 +568,7 @@ export default function AdminTaskBoard() {
                   <label className="block text-sm font-medium text-zinc-300 mb-2">Priority</label>
                   <select
                     value={editTask.priority}
-                    onChange={e => setEditTask(prev => ({ ...prev, priority: e.target.value as any }))}
+                    onChange={e => setEditTask((prev: any) => ({ ...prev, priority: e.target.value as any }))}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                   >
                     <option value="Low">Low</option>
@@ -574,7 +581,7 @@ export default function AdminTaskBoard() {
                   <label className="block text-sm font-medium text-zinc-300 mb-2">Difficulty</label>
                   <select
                     value={editTask.difficulty}
-                    onChange={e => setEditTask(prev => ({ ...prev, difficulty: e.target.value as any }))}
+                    onChange={e => setEditTask((prev: any) => ({ ...prev, difficulty: e.target.value as any }))}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                   >
                     <option value="Mixed">Mixed</option>
@@ -591,7 +598,7 @@ export default function AdminTaskBoard() {
                   <input
                     type="text"
                     value={editTask.exam_code}
-                    onChange={e => setEditTask(prev => ({ ...prev, exam_code: e.target.value }))}
+                    onChange={e => setEditTask((prev: any) => ({ ...prev, exam_code: e.target.value }))}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                     placeholder="e.g., AWS-SAA-C03"
                   />
@@ -601,7 +608,7 @@ export default function AdminTaskBoard() {
                   <input
                     type="date"
                     value={editTask.due_date}
-                    onChange={e => setEditTask(prev => ({ ...prev, due_date: e.target.value }))}
+                    onChange={e => setEditTask((prev: any) => ({ ...prev, due_date: e.target.value }))}
                     className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-white"
                   />
                 </div>

@@ -121,3 +121,65 @@ INSERT INTO knowledge_chunks (knowledge_id, chunk_order, title, content, chunk_t
 (2, 2, 'Execution and Monitoring', 'During execution, regular monitoring is essential...', 'text'),
 (3, 1, 'Arrow Functions', 'Arrow functions provide a concise syntax...', 'code'),
 (3, 2, 'Template Literals', 'Template literals allow embedded expressions...', 'code');
+
+-- Enable RLS (Row Level Security) for knowledge tables
+ALTER TABLE knowledge ENABLE ROW LEVEL SECURITY;
+ALTER TABLE knowledge_chunks ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for knowledge table
+-- Everyone can read knowledge documents
+CREATE POLICY "Anyone can view knowledge" ON knowledge FOR SELECT USING (true);
+
+-- Only admins can insert, update, or delete knowledge documents
+CREATE POLICY "Admins can insert knowledge" ON knowledge FOR INSERT WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM user_profile 
+        WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
+    )
+);
+
+CREATE POLICY "Admins can update knowledge" ON knowledge FOR UPDATE USING (
+    EXISTS (
+        SELECT 1 FROM user_profile 
+        WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
+    )
+);
+
+CREATE POLICY "Admins can delete knowledge" ON knowledge FOR DELETE USING (
+    EXISTS (
+        SELECT 1 FROM user_profile 
+        WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
+    )
+);
+
+-- Create policies for knowledge_chunks table
+-- Everyone can read knowledge chunks
+CREATE POLICY "Anyone can view knowledge chunks" ON knowledge_chunks FOR SELECT USING (true);
+
+-- Only admins can insert, update, or delete knowledge chunks
+CREATE POLICY "Admins can insert knowledge chunks" ON knowledge_chunks FOR INSERT WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM user_profile 
+        WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
+    )
+);
+
+CREATE POLICY "Admins can update knowledge chunks" ON knowledge_chunks FOR UPDATE USING (
+    EXISTS (
+        SELECT 1 FROM user_profile 
+        WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
+    )
+);
+
+CREATE POLICY "Admins can delete knowledge chunks" ON knowledge_chunks FOR DELETE USING (
+    EXISTS (
+        SELECT 1 FROM user_profile 
+        WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
+    )
+);
+
+-- Grant permissions
+GRANT SELECT ON knowledge TO authenticated;
+GRANT SELECT ON knowledge_chunks TO authenticated;
+GRANT ALL ON knowledge TO service_role;
+GRANT ALL ON knowledge_chunks TO service_role;

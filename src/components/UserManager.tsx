@@ -275,20 +275,24 @@ export default function UserManager() {
                           </button>
                         </>
                       )}
-                      <button
-                        onClick={() => setEditingUser(user)}
-                        className="p-1 hover:bg-zinc-700 rounded text-blue-400 hover:text-blue-300"
-                        title="Edit user"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => deleteUser(user.id)}
-                        className="p-1 hover:bg-zinc-700 rounded text-red-400 hover:text-red-300"
-                        title="Delete user"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {currentUser?.role === 'admin' && (
+                        <>
+                          <button
+                            onClick={() => setEditingUser(user)}
+                            className="p-1 hover:bg-zinc-700 rounded text-blue-400 hover:text-blue-300"
+                            title="Edit user"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteUser(user.id)}
+                            className="p-1 hover:bg-zinc-700 rounded text-red-400 hover:text-red-300"
+                            title="Delete user"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

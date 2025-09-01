@@ -40,11 +40,30 @@ ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for tasks
 CREATE POLICY "Anyone can view tasks" ON tasks FOR SELECT USING (true);
-CREATE POLICY "Authenticated users can insert tasks" ON tasks FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Users can update their own tasks or assigned tasks" ON tasks FOR UPDATE USING (
-    auth.uid() = author_id OR auth.uid() = assignee_id
+
+-- Only admins can insert tasks
+CREATE POLICY "Admins can insert tasks" ON tasks FOR INSERT WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM user_profiles 
+        WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
+    )
 );
-CREATE POLICY "Users can delete their own tasks" ON tasks FOR DELETE USING (auth.uid() = author_id);
+
+-- Only admins can update tasks
+CREATE POLICY "Admins can update tasks" ON tasks FOR UPDATE USING (
+    EXISTS (
+        SELECT 1 FROM user_profiles 
+        WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
+    )
+);
+
+-- Only admins can delete tasks
+CREATE POLICY "Admins can delete tasks" ON tasks FOR DELETE USING (
+    EXISTS (
+        SELECT 1 FROM user_profiles 
+        WHERE id = auth.uid() AND role IN ('admin', 'superadmin') AND status = 'approved'
+    )
+);
 
 -- Grant permissions
 GRANT ALL ON tasks TO authenticated;
