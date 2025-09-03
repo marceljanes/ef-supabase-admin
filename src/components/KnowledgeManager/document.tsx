@@ -533,6 +533,7 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
           const lines = text.split(/\r?\n/);
           const htmlParts: string[] = [];
           let inList = false;
+          let inParagraph = false;
 
           const formatInline = (s: string) =>
             s
@@ -546,15 +547,22 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
 
           for (let i = 0; i < lines.length; i++) {
             const raw = lines[i];
+            const trimmed = raw.trim();
 
             if (isBullet(raw)) {
+              // End any open paragraph before starting list
+              if (inParagraph) {
+                htmlParts.push('</p>');
+                inParagraph = false;
+              }
+              
               if (!inList) {
-                htmlParts.push('<ul class="list-disc pl-6 my-2">');
+                htmlParts.push('<ul class="list-disc pl-6 my-3">');
                 inList = true;
               }
               const t = raw.trimStart();
               const itemText = t.replace(/^[-*•]\s+/, '');
-              htmlParts.push(`<li>${formatInline(itemText)}</li>`);
+              htmlParts.push(`<li class="mb-1">${formatInline(itemText)}</li>`);
               continue;
             }
 
@@ -564,17 +572,36 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
               inList = false;
             }
 
-            // Blank line => paragraph break
-            if (raw.trim() === '') {
-              htmlParts.push('<br />');
+            // Handle empty lines - only add paragraph break if we're in a paragraph
+            if (trimmed === '') {
+              if (inParagraph) {
+                htmlParts.push('</p>');
+                inParagraph = false;
+              }
+              // Look ahead to see if next line has content to decide on spacing
+              const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+              if (nextLine && !isBullet(lines[i + 1])) {
+                htmlParts.push('<br />');
+              }
             } else {
-              // Normal text line, keep as is with inline formatting
-              htmlParts.push(`${formatInline(raw)}<br />`);
+              // Non-empty line - start paragraph if not in one
+              if (!inParagraph) {
+                htmlParts.push('<p class="mb-3">');
+                inParagraph = true;
+              } else {
+                // Add space between lines within same paragraph
+                htmlParts.push(' ');
+              }
+              htmlParts.push(formatInline(trimmed));
             }
           }
 
+          // Close any open tags
           if (inList) {
             htmlParts.push('</ul>');
+          }
+          if (inParagraph) {
+            htmlParts.push('</p>');
           }
 
           return <span dangerouslySetInnerHTML={{ __html: htmlParts.join('') }} />;
