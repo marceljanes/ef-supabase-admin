@@ -199,103 +199,140 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   // Handle Enter key specifically to ensure proper line breaks and list behavior
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
+      
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0 && editorRef.current) {
         const range = selection.getRangeAt(0);
         
-        // Get the current line content
-        let currentLine = '';
-        let lineStart = range.startOffset;
-        const textContent = editorRef.current.textContent || '';
+        // Get current line by looking at the text before cursor
+        const beforeCursor = editorRef.current.textContent?.substring(0, range.startOffset) || '';
+        const lines = beforeCursor.split('\n');
+        const currentLine = lines[lines.length - 1] || '';
         
-        // Find the start of the current line
-        let lineStartPos = textContent.lastIndexOf('\n', range.startOffset - 1) + 1;
-        let lineEndPos = textContent.indexOf('\n', range.startOffset);
-        if (lineEndPos === -1) lineEndPos = textContent.length;
-        
-        currentLine = textContent.substring(lineStartPos, lineEndPos);
-        
-        // Check if current line is a list item (starts with "- ")
-        const isListItem = currentLine.trim().startsWith('- ');
-        const isEmptyListItem = currentLine.trim() === '-' || currentLine.trim() === '- ';
-        
-        if (isListItem) {
-          e.preventDefault();
-          
-          if (isEmptyListItem) {
-            // Empty list item - exit list mode
-            // Remove the current "- " and don't create a new one
+        // Check if current line starts with list marker
+        if (currentLine.startsWith('- ')) {
+          if (currentLine.trim() === '-' || currentLine.trim() === '- ') {
+            // Empty list item - exit list mode with double line break
             document.execCommand('insertHTML', false, '<br><br>');
           } else {
             // Continue list with new item
             document.execCommand('insertHTML', false, '<br>- ');
           }
-          
-          // Update content after DOM change
-          setTimeout(() => {
-            handleInput();
-          }, 0);
-          return;
+        } else {
+          // Normal line break
+          document.execCommand('insertHTML', false, '<br>');
         }
+        
+        // Apply formatting after DOM change
+        setTimeout(() => {
+          handleInputChange();
+        }, 10);
       }
-      
-      // Let the browser handle Enter naturally for non-list items
+    } else {
+      // For other keys, apply formatting after input
       setTimeout(() => {
-        handleInput();
-      }, 0);
+        handleInputChange();
+      }, 10);
     }
   };
 
   // Handle input to detect and format list items
   const handleInputChange = (e?: React.FormEvent) => {
     if (editorRef.current) {
-      // Apply list formatting for lines starting with "- "
-      const htmlContent = editorRef.current.innerHTML;
-      let formattedContent = htmlContent;
+      const textContent = editorRef.current.textContent || '';
+      const lines = textContent.split('\n');
+      let hasListItems = false;
       
-      // Find and format list items
-      formattedContent = formattedContent.replace(
-        /^(- .+)$/gm, 
-        '<div style="margin-left: 20px; margin-top: 8px; margin-bottom: 4px;">$1</div>'
-      );
+      // Check if we have any list items
+      for (const line of lines) {
+        if (line.trim().startsWith('- ') && line.trim().length > 2) {
+          hasListItems = true;
+          break;
+        }
+      }
       
-      // Only update if content changed to avoid cursor issues
-      if (formattedContent !== htmlContent) {
+      if (hasListItems) {
         // Save cursor position
         const selection = window.getSelection();
         let cursorOffset = 0;
         if (selection && selection.rangeCount > 0) {
-          cursorOffset = selection.getRangeAt(0).startOffset;
+          const range = selection.getRangeAt(0);
+          // Get the offset relative to the text content
+          const walker = document.createTreeWalker(
+            editorRef.current,
+            NodeFilter.SHOW_TEXT
+          );
+          let node;
+          let textOffset = 0;
+          while (node = walker.nextNode()) {
+            if (node === range.startContainer) {
+              cursorOffset = textOffset + range.startOffset;
+              break;
+            }
+            textOffset += (node as Text).textContent?.length || 0;
+          }
         }
         
-        editorRef.current.innerHTML = formattedContent;
-        
-        // Restore cursor position
-        if (selection && editorRef.current.firstChild) {
-          try {
-            const range = document.createRange();
-            const walker = document.createTreeWalker(
-              editorRef.current,
-              NodeFilter.SHOW_TEXT,
-              null
-            );
-            
-            let textNode = walker.nextNode();
-            if (textNode && textNode.textContent) {
-              const maxOffset = textNode.textContent.length;
-              range.setStart(textNode, Math.min(cursorOffset, maxOffset));
-              range.collapse(true);
-              selection.removeAllRanges();
-              selection.addRange(range);
+        // Build formatted HTML
+        let formattedHTML = '';
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (line.trim().startsWith('- ') && line.trim().length > 2) {
+            // This is a list item - format it with indentation
+            formattedHTML += `<div style="margin-left: 20px; margin-top: 6px; margin-bottom: 2px;">${line}</div>`;
+          } else {
+            // Regular line
+            if (line.trim()) {
+              formattedHTML += `<div>${line}</div>`;
+            } else {
+              formattedHTML += '<br>';
             }
-          } catch (e) {
-            // Ignore cursor positioning errors
+          }
+        }
+        
+        // Update content if it changed
+        if (editorRef.current.innerHTML !== formattedHTML) {
+          editorRef.current.innerHTML = formattedHTML;
+          
+          // Restore cursor position
+          if (selection) {
+            try {
+              const walker = document.createTreeWalker(
+                editorRef.current,
+                NodeFilter.SHOW_TEXT
+              );
+              let node;
+              let textOffset = 0;
+              let targetNode = null;
+              let targetOffset = 0;
+              
+              while (node = walker.nextNode()) {
+                const nodeLength = (node as Text).textContent?.length || 0;
+                if (textOffset + nodeLength >= cursorOffset) {
+                  targetNode = node;
+                  targetOffset = cursorOffset - textOffset;
+                  break;
+                }
+                textOffset += nodeLength;
+              }
+              
+              if (targetNode) {
+                const range = document.createRange();
+                range.setStart(targetNode, Math.min(targetOffset, (targetNode as Text).textContent?.length || 0));
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+              }
+            } catch (e) {
+              // Ignore cursor positioning errors
+            }
           }
         }
       }
       
       // Convert to plain text and notify parent
-      const plainText = convertHtmlToText(editorRef.current.innerHTML);
+      const plainText = editorRef.current.textContent || '';
       if (plainText !== value) {
         onChange(plainText);
       }
