@@ -196,11 +196,9 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     handleInputChange(e);
   };
 
-  // Handle Enter key specifically to ensure proper line breaks and list behavior
+  // Handle Enter key specifically for list behavior only
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      e.preventDefault();
-      
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0 && editorRef.current) {
         const range = selection.getRangeAt(0);
@@ -210,8 +208,9 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         const lines = beforeCursor.split('\n');
         const currentLine = lines[lines.length - 1] || '';
         
-        // Check if current line starts with list marker
+        // Only handle special list behavior, otherwise let browser handle Enter normally
         if (currentLine.startsWith('- ')) {
+          e.preventDefault();
           if (currentLine.trim() === '-' || currentLine.trim() === '- ') {
             // Empty list item - exit list mode with double line break
             document.execCommand('insertHTML', false, '<br><br>');
@@ -219,120 +218,63 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
             // Continue list with new item
             document.execCommand('insertHTML', false, '<br>- ');
           }
-        } else {
-          // Normal line break
-          document.execCommand('insertHTML', false, '<br>');
+          
+          // Apply formatting after DOM change
+          setTimeout(() => {
+            handleInputChange();
+          }, 10);
+          return;
         }
-        
-        // Apply formatting after DOM change
-        setTimeout(() => {
-          handleInputChange();
-        }, 10);
       }
-    } else {
-      // For other keys, apply formatting after input
+      
+      // Let browser handle Enter normally for non-list items
       setTimeout(() => {
         handleInputChange();
       }, 10);
     }
   };
 
-  // Handle input to detect and format list items
+  // Simple input handler that applies list formatting
   const handleInputChange = (e?: React.FormEvent) => {
     if (editorRef.current) {
-      const textContent = editorRef.current.textContent || '';
-      const lines = textContent.split('\n');
-      let hasListItems = false;
+      const htmlContent = editorRef.current.innerHTML;
       
-      // Check if we have any list items
-      for (const line of lines) {
-        if (line.trim().startsWith('- ') && line.trim().length > 2) {
-          hasListItems = true;
-          break;
-        }
-      }
+      // Simple regex to add styling to lines that start with "- "
+      const formattedContent = htmlContent.replace(
+        /(^|<br>)(- .+?)(?=<br>|$)/g,
+        '$1<div style="margin-left: 20px; margin-top: 6px; margin-bottom: 2px;">$2</div>'
+      );
       
-      if (hasListItems) {
+      // Only update if content actually changed
+      if (formattedContent !== htmlContent) {
         // Save cursor position
         const selection = window.getSelection();
         let cursorOffset = 0;
         if (selection && selection.rangeCount > 0) {
           const range = selection.getRangeAt(0);
-          // Get the offset relative to the text content
-          const walker = document.createTreeWalker(
-            editorRef.current,
-            NodeFilter.SHOW_TEXT
-          );
-          let node;
-          let textOffset = 0;
-          while (node = walker.nextNode()) {
-            if (node === range.startContainer) {
-              cursorOffset = textOffset + range.startOffset;
-              break;
-            }
-            textOffset += (node as Text).textContent?.length || 0;
-          }
+          cursorOffset = range.startOffset;
         }
         
-        // Build formatted HTML
-        let formattedHTML = '';
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          if (line.trim().startsWith('- ') && line.trim().length > 2) {
-            // This is a list item - format it with indentation
-            formattedHTML += `<div style="margin-left: 20px; margin-top: 6px; margin-bottom: 2px;">${line}</div>`;
-          } else {
-            // Regular line
-            if (line.trim()) {
-              formattedHTML += `<div>${line}</div>`;
-            } else {
-              formattedHTML += '<br>';
-            }
-          }
-        }
+        editorRef.current.innerHTML = formattedContent;
         
-        // Update content if it changed
-        if (editorRef.current.innerHTML !== formattedHTML) {
-          editorRef.current.innerHTML = formattedHTML;
-          
-          // Restore cursor position
-          if (selection) {
-            try {
-              const walker = document.createTreeWalker(
-                editorRef.current,
-                NodeFilter.SHOW_TEXT
-              );
-              let node;
-              let textOffset = 0;
-              let targetNode = null;
-              let targetOffset = 0;
-              
-              while (node = walker.nextNode()) {
-                const nodeLength = (node as Text).textContent?.length || 0;
-                if (textOffset + nodeLength >= cursorOffset) {
-                  targetNode = node;
-                  targetOffset = cursorOffset - textOffset;
-                  break;
-                }
-                textOffset += nodeLength;
-              }
-              
-              if (targetNode) {
-                const range = document.createRange();
-                range.setStart(targetNode, Math.min(targetOffset, (targetNode as Text).textContent?.length || 0));
-                range.collapse(true);
-                selection.removeAllRanges();
-                selection.addRange(range);
-              }
-            } catch (e) {
-              // Ignore cursor positioning errors
-            }
+        // Restore cursor position
+        if (selection && editorRef.current.firstChild) {
+          try {
+            const newRange = document.createRange();
+            const textNode = editorRef.current.firstChild;
+            const maxOffset = textNode.textContent?.length || 0;
+            newRange.setStart(textNode, Math.min(cursorOffset, maxOffset));
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+          } catch (e) {
+            // Ignore cursor positioning errors
           }
         }
       }
       
       // Convert to plain text and notify parent
-      const plainText = editorRef.current.textContent || '';
+      const plainText = convertHtmlToText(editorRef.current.innerHTML);
       if (plainText !== value) {
         onChange(plainText);
       }
