@@ -138,6 +138,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     return text
       .replace(/\n/g, '<br>')
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[color:#([a-fA-F0-9]{6})\](.*?)\[\/color\]/g, '<span style="color: #$1;">$2</span>')
       .replace(/^- (.*?)(<br>|$)/gm, '<ul><li>$1</li></ul>$2')
       .replace(/<\/ul><br><ul>/g, '') // Clean up consecutive lists
       .replace(/<ul><br>/g, '<ul>'); // Clean up list starts
@@ -152,6 +153,8 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
       .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+      .replace(/<span style="color:\s*#([a-fA-F0-9]{6});?"[^>]*>(.*?)<\/span>/gi, '[color:#$1]$2[/color]')
+      .replace(/<font color="#([a-fA-F0-9]{6})"[^>]*>(.*?)<\/font>/gi, '[color:#$1]$2[/color]')
       .replace(/<li>(.*?)<\/li>/gi, '- $1\n')
       .replace(/<ul>|<\/ul>/gi, '')
       .replace(/<[^>]*>/g, '') // Remove remaining HTML tags

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { GraphicEditor } from './GraphicEditor';
+import { GraphicEditor } from './GraphicEditor/index';
 import { RichTextEditor } from './RichTextEditor';
 
 // Safe date formatting for SSR
@@ -306,6 +306,19 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
           </h3>
         );
       case 'text':
+        // Helper function to render formatted text with color support
+        const renderFormattedText = (text: string) => {
+          if (!text) return '';
+          
+          // Convert markdown-like syntax to HTML
+          let formattedText = text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\[color:#([a-fA-F0-9]{6})\](.*?)\[\/color\]/g, '<span style="color: #$1;">$2</span>')
+            .replace(/\n/g, '<br />');
+          
+          return <span dangerouslySetInnerHTML={{ __html: formattedText }} />;
+        };
+
         return (
           <div className="mb-4">
             {chunk.title && (
@@ -313,11 +326,11 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
                 documentTheme === 'light' ? 'text-black' : 'text-white'
               }`}>{chunk.title}</h4>
             )}
-            <p className={`text-base leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere ${
+            <div className={`text-base leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere ${
               documentTheme === 'light' ? 'text-black' : 'text-zinc-200'
             }`}>
-              {chunk.content}
-            </p>
+              {renderFormattedText(chunk.content)}
+            </div>
           </div>
         );
       case 'list':
