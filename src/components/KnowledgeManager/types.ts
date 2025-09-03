@@ -6,6 +6,9 @@ export interface KnowledgeManagerState {
   editingKnowledge: any | null;
   selectedDocument: any | null;
   chunks: any[];
+  // Multiple document tabs
+  openDocumentTabs: Array<{ id: number; title: string; document: any; chunks: any[] }>;
+  activeDocumentTabId: number | null;
   searchTerm: string;
   statusFilter: 'all' | 'active' | 'inactive';
   typeFilter: string;

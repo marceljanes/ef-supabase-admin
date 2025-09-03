@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { GraphicEditor } from './GraphicEditor/index';
+import { GraphicEditor } from './GraphicEditor';
 
 // Safe date formatting for SSR
 const useSafeDate = (dateString: string) => {
@@ -79,10 +79,12 @@ interface ChunkProps {
   isLast?: boolean;
   isMoving?: boolean;
   onEditChunk: (chunk: any) => void;
+  onUpdateChunkDirect?: (chunkData: any) => void;
   onDeleteChunk: (chunkId: number) => void;
   onMoveChunkUp?: (chunkId: number) => void;
   onMoveChunkDown?: (chunkId: number) => void;
   onInsertTextChunkAfter?: (chunkOrder: number) => void;
+  onCreateChunkDirect?: (chunkData: any, insertAfter?: number) => void;
   onInsertGraphicChunkAfter?: (chunkOrder: number) => void;
   onInsertImageChunkAfter?: (chunkOrder: number, file: File) => void;
 }
@@ -94,15 +96,180 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
   isLast = false,
   isMoving = false,
   onEditChunk, 
+  onUpdateChunkDirect,
   onDeleteChunk,
   onMoveChunkUp,
   onMoveChunkDown,
   onInsertTextChunkAfter,
+  onCreateChunkDirect,
   onInsertGraphicChunkAfter,
   onInsertImageChunkAfter
 }) => {
   const [showInsertMenu, setShowInsertMenu] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [editTitle, setEditTitle] = useState(chunk.title || '');
+  const [editContent, setEditContent] = useState(chunk.content || '');
+  const [editType, setEditType] = useState(chunk.chunk_type || 'text');
+  
+  // State for inline chunk creation
+  const [newChunkTitle, setNewChunkTitle] = useState('');
+  const [newChunkContent, setNewChunkContent] = useState('');
+  const [newChunkType, setNewChunkType] = useState('text');
+
+  // Initialize edit values when chunk changes
+  React.useEffect(() => {
+    setEditTitle(chunk.title || '');
+    setEditContent(chunk.content || '');
+    setEditType(chunk.chunk_type || 'text');
+  }, [chunk.title, chunk.content, chunk.chunk_type]);
+
+  const handleSaveEdit = () => {
+    // Use direct update to bypass modal
+    if (onUpdateChunkDirect) {
+      const updatedChunk = {
+        title: editTitle,
+        content: editContent,
+        chunk_type: editType
+      };
+      onUpdateChunkDirect(updatedChunk);
+      setIsEditing(false);
+    } else {
+      // Fallback to original method
+      const updatedChunk = {
+        ...chunk,
+        title: editTitle,
+        content: editContent,
+        chunk_type: editType
+      };
+      onEditChunk(updatedChunk);
+      setIsEditing(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    // Reset to original values
+    setEditTitle(chunk.title || '');
+    setEditContent(chunk.content || '');
+    setEditType(chunk.chunk_type || 'text');
+    setIsEditing(false);
+  };
+
+  const handleCreateChunk = () => {
+    if (onCreateChunkDirect && newChunkContent.trim()) {
+      const chunkData = {
+        title: newChunkTitle,
+        content: newChunkContent,
+        chunk_type: newChunkType
+      };
+      onCreateChunkDirect(chunkData, chunk.chunk_order);
+      
+      // Reset form
+      setNewChunkTitle('');
+      setNewChunkContent('');
+      setNewChunkType('text');
+      setIsCreating(false);
+    }
+  };
+
+  const handleCancelCreate = () => {
+    setNewChunkTitle('');
+    setNewChunkContent('');
+    setNewChunkType('text');
+    setIsCreating(false);
+  };
   const renderChunkContent = () => {
+    if (isEditing) {
+      // Render editable inputs for all chunk types
+      return (
+        <div className="space-y-3">
+          {/* Chunk Type Selector */}
+          <div className="flex items-center gap-3 mb-4">
+            <select
+              value={editType}
+              onChange={(e) => setEditType(e.target.value)}
+              className={`px-3 py-2 rounded-lg border text-sm ${
+                documentTheme === 'light'
+                  ? 'bg-white border-gray-300 text-black'
+                  : 'bg-zinc-700 border-zinc-600 text-white'
+              }`}
+            >
+              <option value="title">Titel</option>
+              <option value="heading">Überschrift</option>
+              <option value="subheading">Unterüberschrift</option>
+              <option value="text">Text</option>
+              <option value="list">Liste</option>
+              <option value="code">Code</option>
+              <option value="table">Tabelle</option>
+              <option value="graphic">Grafik</option>
+              <option value="image">Bild</option>
+            </select>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveEdit}
+                className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Speichern
+              </button>
+              <button
+                onClick={handleCancelEdit}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  documentTheme === 'light'
+                    ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                    : 'bg-zinc-600 hover:bg-zinc-500 text-white'
+                }`}
+              >
+                Abbrechen
+              </button>
+            </div>
+          </div>
+
+          {/* Title Input (for all chunk types except title which uses content) */}
+          {editType !== 'title' && editType !== 'heading' && editType !== 'subheading' && (
+            <input
+              type="text"
+              placeholder="Titel (optional)"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                documentTheme === 'light'
+                  ? 'bg-white border-gray-300 text-black placeholder-gray-500'
+                  : 'bg-zinc-700 border-zinc-600 text-white placeholder-zinc-400'
+              }`}
+            />
+          )}
+
+          {/* Content Input */}
+          {editType === 'title' || editType === 'heading' || editType === 'subheading' ? (
+            <input
+              type="text"
+              placeholder={`${editType === 'title' ? 'Titel' : editType === 'heading' ? 'Überschrift' : 'Unterüberschrift'} eingeben...`}
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className={`w-full px-3 py-2 rounded-lg border text-lg font-medium ${
+                documentTheme === 'light'
+                  ? 'bg-white border-gray-300 text-black placeholder-gray-500'
+                  : 'bg-zinc-700 border-zinc-600 text-white placeholder-zinc-400'
+              }`}
+            />
+          ) : (
+            <textarea
+              placeholder="Inhalt eingeben..."
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              rows={editType === 'code' || editType === 'table' ? 12 : 8}
+              className={`w-full px-3 py-2 rounded-lg border text-sm resize-none ${
+                documentTheme === 'light'
+                  ? 'bg-white border-gray-300 text-black placeholder-gray-500'
+                  : 'bg-zinc-700 border-zinc-600 text-white placeholder-zinc-400'
+              } ${editType === 'code' ? 'font-mono' : ''}`}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // Render static content when not editing
     switch (chunk.chunk_type) {
       case 'title':
         return (
@@ -373,14 +540,22 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
       }`}>
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => onEditChunk(chunk)}
+            onClick={() => {
+              // For graphic chunks, still use modal
+              if (chunk.chunk_type === 'graphic') {
+                onEditChunk(chunk);
+              } else {
+                // For other chunks, use inline editing
+                setIsEditing(true);
+              }
+            }}
             disabled={isMoving}
             className={`w-8 h-8 rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-110 active:scale-95 flex items-center justify-center text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
               documentTheme === 'light'
                 ? 'bg-gray-100 border border-gray-300 text-gray-600 hover:bg-gray-200'
                 : 'bg-zinc-700 border border-zinc-600 text-zinc-300 hover:bg-zinc-600'
             }`}
-            title="Bearbeiten"
+            title={chunk.chunk_type === 'graphic' ? 'Bearbeiten' : 'Inline bearbeiten'}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -428,7 +603,8 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
               }`}>
                 <button
                   onClick={() => {
-                    onInsertTextChunkAfter && onInsertTextChunkAfter(chunk.chunk_order);
+                    // Use inline chunk creation
+                    setIsCreating(true);
                     setShowInsertMenu(false);
                   }}
                   className={`w-full px-3 py-2 text-left rounded transition-colors text-sm flex items-center gap-2 ${
@@ -481,6 +657,98 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Inline Chunk Creation */}
+      {isCreating && (
+        <div className={`mt-4 p-4 border rounded-lg ${
+          documentTheme === 'light' 
+            ? 'bg-gray-50 border-gray-300' 
+            : 'bg-zinc-700 border-zinc-600'
+        }`}>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 mb-4">
+              <select
+                value={newChunkType}
+                onChange={(e) => setNewChunkType(e.target.value)}
+                className={`px-3 py-2 rounded-lg border text-sm ${
+                  documentTheme === 'light'
+                    ? 'bg-white border-gray-300 text-black'
+                    : 'bg-zinc-800 border-zinc-600 text-white'
+                }`}
+              >
+                <option value="title">Titel</option>
+                <option value="heading">Überschrift</option>
+                <option value="subheading">Unterüberschrift</option>
+                <option value="text">Text</option>
+                <option value="list">Liste</option>
+                <option value="code">Code</option>
+                <option value="table">Tabelle</option>
+              </select>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreateChunk}
+                  disabled={!newChunkContent.trim()}
+                  className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Erstellen
+                </button>
+                <button
+                  onClick={handleCancelCreate}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    documentTheme === 'light'
+                      ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                      : 'bg-zinc-600 hover:bg-zinc-500 text-white'
+                  }`}
+                >
+                  Abbrechen
+                </button>
+              </div>
+            </div>
+
+            {/* Title Input (for chunk types that need it) */}
+            {newChunkType !== 'title' && newChunkType !== 'heading' && newChunkType !== 'subheading' && (
+              <input
+                type="text"
+                placeholder="Titel (optional)"
+                value={newChunkTitle}
+                onChange={(e) => setNewChunkTitle(e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                  documentTheme === 'light'
+                    ? 'bg-white border-gray-300 text-black placeholder-gray-500'
+                    : 'bg-zinc-800 border-zinc-600 text-white placeholder-zinc-400'
+                }`}
+              />
+            )}
+
+            {/* Content Input */}
+            {newChunkType === 'title' || newChunkType === 'heading' || newChunkType === 'subheading' ? (
+              <input
+                type="text"
+                placeholder={`${newChunkType === 'title' ? 'Titel' : newChunkType === 'heading' ? 'Überschrift' : 'Unterüberschrift'} eingeben...`}
+                value={newChunkContent}
+                onChange={(e) => setNewChunkContent(e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg border text-lg font-medium ${
+                  documentTheme === 'light'
+                    ? 'bg-white border-gray-300 text-black placeholder-gray-500'
+                    : 'bg-zinc-800 border-zinc-600 text-white placeholder-zinc-400'
+                }`}
+              />
+            ) : (
+              <textarea
+                placeholder="Inhalt eingeben..."
+                value={newChunkContent}
+                onChange={(e) => setNewChunkContent(e.target.value)}
+                rows={newChunkType === 'code' || newChunkType === 'table' ? 10 : 6}
+                className={`w-full px-3 py-2 rounded-lg border text-sm resize-none ${
+                  documentTheme === 'light'
+                    ? 'bg-white border-gray-300 text-black placeholder-gray-500'
+                    : 'bg-zinc-800 border-zinc-600 text-white placeholder-zinc-400'
+                } ${newChunkType === 'code' ? 'font-mono' : ''}`}
+              />
+            )}
+          </div>
         </div>
       )}
       

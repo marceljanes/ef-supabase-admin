@@ -112,7 +112,7 @@ export const KnowledgeCard: React.FC<KnowledgeCardProps> = ({
         <div className="flex gap-2">
           <button
             onClick={() => onOpenDocument(item)}
-            className="flex-1 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-sm font-medium"
+            className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition-colors"
           >
             Open
           </button>

@@ -9,6 +9,8 @@ export const useKnowledgeManager = () => {
     error: null,
     showCreateForm: false,
     editingKnowledge: null,
+    openDocumentTabs: [],
+    activeDocumentTabId: null,
     selectedDocument: null,
     chunks: [],
     searchTerm: '',
@@ -46,6 +48,23 @@ export const useKnowledgeManager = () => {
     documentTheme: 'dark',
     showEmptyDocumentMenu: false
   });
+
+  // Helper functions for current document/chunks
+  const getCurrentDocument = () => {
+    if (!state.activeDocumentTabId || state.openDocumentTabs.length === 0) {
+      return state.selectedDocument;
+    }
+    const activeTab = state.openDocumentTabs.find(tab => tab.id === state.activeDocumentTabId);
+    return activeTab?.document || state.selectedDocument;
+  };
+
+  const getCurrentChunks = () => {
+    if (!state.activeDocumentTabId || state.openDocumentTabs.length === 0) {
+      return state.chunks;
+    }
+    const activeTab = state.openDocumentTabs.find(tab => tab.id === state.activeDocumentTabId);
+    return activeTab?.chunks || state.chunks;
+  };
 
   const loadKnowledge = async () => {
     try {
@@ -94,7 +113,39 @@ export const useKnowledgeManager = () => {
   };
 
   const openDocument = async (item: any) => {
-    await loadKnowledgeDetail(item.id);
+    // Check if document is already open in a tab
+    const existingTab = state.openDocumentTabs.find(tab => tab.id === item.id);
+    
+    if (existingTab) {
+      // Switch to existing tab
+      setState(prev => ({
+        ...prev,
+        activeDocumentTabId: existingTab.id,
+        activeTab: 'document'
+      }));
+    } else {
+      // Load document details
+      const detail = await dbService.getKnowledgeById(item.id);
+      const sortedChunks = (detail.chunks || []).sort((a: any, b: any) => a.chunk_order - b.chunk_order);
+      
+      // Create new tab
+      const newTab = {
+        id: item.id,
+        title: item.title,
+        document: detail,
+        chunks: sortedChunks
+      };
+      
+      setState(prev => ({
+        ...prev,
+        openDocumentTabs: [...prev.openDocumentTabs, newTab],
+        activeDocumentTabId: item.id,
+        activeTab: 'document',
+        // Keep backward compatibility
+        selectedDocument: detail,
+        chunks: sortedChunks
+      }));
+    }
   };
 
   const closeDocument = () => {
@@ -105,6 +156,74 @@ export const useKnowledgeManager = () => {
       activeTab: 'overview',
       showChunkForm: false
     }));
+  };
+
+  const closeDocumentTab = (tabId: number) => {
+    setState(prev => {
+      const remainingTabs = prev.openDocumentTabs.filter(tab => tab.id !== tabId);
+      const wasActiveTab = prev.activeDocumentTabId === tabId;
+      
+      if (remainingTabs.length === 0) {
+        // No tabs left, go back to overview
+        return {
+          ...prev,
+          openDocumentTabs: [],
+          activeDocumentTabId: null,
+          selectedDocument: null,
+          chunks: [],
+          activeTab: 'overview',
+          showChunkForm: false
+        };
+      } else if (wasActiveTab) {
+        // Switch to the last remaining tab
+        const newActiveTab = remainingTabs[remainingTabs.length - 1];
+        return {
+          ...prev,
+          openDocumentTabs: remainingTabs,
+          activeDocumentTabId: newActiveTab.id,
+          selectedDocument: newActiveTab.document,
+          chunks: newActiveTab.chunks
+        };
+      } else {
+        // Just remove the tab, keep current active tab
+        return {
+          ...prev,
+          openDocumentTabs: remainingTabs
+        };
+      }
+    });
+  };
+
+  const switchToTab = (tabId: number) => {
+    const tab = state.openDocumentTabs.find(t => t.id === tabId);
+    if (tab) {
+      setState(prev => ({
+        ...prev,
+        activeDocumentTabId: tabId,
+        selectedDocument: tab.document,
+        chunks: tab.chunks,
+        activeTab: 'document'
+      }));
+    }
+  };
+
+  // Update chunks in the current active tab
+  const updateActiveTabChunks = (newChunks: any[]) => {
+    setState(prev => {
+      if (!prev.activeDocumentTabId) return prev;
+      
+      const updatedTabs = prev.openDocumentTabs.map(tab => 
+        tab.id === prev.activeDocumentTabId 
+          ? { ...tab, chunks: newChunks }
+          : tab
+      );
+      
+      return {
+        ...prev,
+        openDocumentTabs: updatedTabs,
+        chunks: newChunks // Also update backward compatibility
+      };
+    });
   };
 
   const createChunk = async (knowledgeId: number, insertAfterOrder?: number) => {
@@ -321,6 +440,68 @@ export const useKnowledgeManager = () => {
         editingChunkId: null,
         showChunkForm: false
       }));
+      
+      await loadKnowledgeDetail(knowledgeId);
+    } catch (err: any) {
+      setState(prev => ({ ...prev, error: err.message }));
+    }
+  };
+
+  // Direct update function for inline editing (bypasses modal)
+  const updateChunkDirect = async (knowledgeId: number, chunkId: number, chunkData: any) => {
+    try {
+      // Serialize content for storage
+      const content = chunkData.chunk_type === 'graphic' 
+        ? JSON.stringify(chunkData.content)
+        : chunkData.content;
+
+      await dbService.updateKnowledgeChunk(chunkId, {
+        ...chunkData,
+        content: content as string
+      });
+      
+      await loadKnowledgeDetail(knowledgeId);
+    } catch (err: any) {
+      setState(prev => ({ ...prev, error: err.message }));
+    }
+  };
+
+  // Direct creation function for inline chunk creation
+  const createChunkDirect = async (knowledgeId: number, chunkData: any, insertAfterOrder?: number) => {
+    try {
+      let nextOrder: number;
+      
+      if (insertAfterOrder !== undefined && insertAfterOrder !== null) {
+        // Insert between chunks
+        const sortedChunks = [...state.chunks].sort((a, b) => a.chunk_order - b.chunk_order);
+        const insertAfterIndex = sortedChunks.findIndex(c => c.chunk_order === insertAfterOrder);
+        const nextChunk = insertAfterIndex >= 0 && insertAfterIndex < sortedChunks.length - 1 
+          ? sortedChunks[insertAfterIndex + 1] 
+          : null;
+        
+        if (nextChunk) {
+          nextOrder = nextChunk.chunk_order;
+          const chunksToShift = sortedChunks.slice(insertAfterIndex + 1);
+          
+          for (const chunk of chunksToShift) {
+            await dbService.updateKnowledgeChunk(chunk.id!, {
+              chunk_order: chunk.chunk_order + 100
+            });
+          }
+        } else {
+          nextOrder = insertAfterOrder + 100;
+        }
+      } else {
+        const maxOrder = state.chunks.length > 0 ? Math.max(...state.chunks.map(c => c.chunk_order)) : 0;
+        nextOrder = Math.ceil((maxOrder + 100) / 100) * 100;
+      }
+
+      await dbService.createKnowledgeChunk({
+        knowledge_id: knowledgeId,
+        ...chunkData,
+        chunk_order: nextOrder,
+        content: chunkData.content as string
+      });
       
       await loadKnowledgeDetail(knowledgeId);
     } catch (err: any) {
@@ -677,8 +858,13 @@ export const useKnowledgeManager = () => {
     loadKnowledgeDetail,
     openDocument,
     closeDocument,
+    closeDocumentTab,
+    switchToTab,
+    updateActiveTabChunks,
     createChunk,
     updateChunk,
+    updateChunkDirect,
+    createChunkDirect,
     createGraphicChunk,
     createImageChunk,
     insertChunkBetween,

@@ -33,8 +33,13 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
     loadKnowledgeDetail,
     openDocument,
     closeDocument,
+    closeDocumentTab,
+    switchToTab,
+    updateActiveTabChunks,
     createChunk,
     updateChunk,
+    updateChunkDirect,
+    createChunkDirect,
     createGraphicChunk,
     createImageChunk,
     insertChunkBetween,
@@ -152,6 +157,45 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
         error={state.error} 
         onClearError={() => setState(prev => ({ ...prev, error: null }))} 
       />
+
+      {/* Document Tabs */}
+      {state.openDocumentTabs.length > 0 && (
+        <div className="border-b border-zinc-700 bg-zinc-800 rounded-t-lg">
+          <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto">
+            {state.openDocumentTabs.map((tab) => (
+              <div
+                key={tab.id}
+                className={`flex items-center gap-2 px-4 py-2 rounded-t-lg border-b-2 min-w-0 max-w-xs ${
+                  state.activeDocumentTabId === tab.id
+                    ? 'bg-zinc-900 border-blue-400 text-white'
+                    : 'bg-zinc-700 border-transparent text-zinc-300 hover:bg-zinc-600 hover:text-white'
+                } transition-all cursor-pointer`}
+              >
+                <button
+                  onClick={() => switchToTab(tab.id)}
+                  className="flex items-center gap-2 min-w-0 flex-1"
+                  title={tab.title}
+                >
+                  <div className="w-2 h-2 bg-green-400 rounded-full flex-shrink-0"></div>
+                  <span className="truncate text-sm font-medium">
+                    {tab.title}
+                  </span>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeDocumentTab(tab.id);
+                  }}
+                  className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full hover:bg-zinc-600 transition-colors"
+                  title="Dokument schließen"
+                >
+                  <span className="text-zinc-400 hover:text-white text-sm">×</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Overview Tab */}
       {state.activeTab === 'overview' && (
@@ -357,23 +401,33 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
                           isFirst={index === 0}
                           isLast={index === sortedChunks.length - 1}
                           isMoving={state.movingChunkId === chunk.id}
-                          onEditChunk={editChunk}
+                          onEditChunk={(chunk) => {
+                            // For non-graphic chunks, use direct inline editing
+                            if (chunk.chunk_type !== 'graphic') {
+                              return; // Inline editing is handled directly in ChunkRenderer
+                            } else {
+                              // For graphic chunks, still use the modal
+                              editChunk(chunk);
+                            }
+                          }}
+                          onUpdateChunkDirect={(chunkData) => {
+                            // Direct update for inline editing
+                            if (state.selectedDocument) {
+                              updateChunkDirect(state.selectedDocument.id!, chunk.id, chunkData);
+                            }
+                          }}
                           onDeleteChunk={deleteChunk}
                           onMoveChunkUp={moveChunkUp}
                           onMoveChunkDown={moveChunkDown}
                           onInsertTextChunkAfter={(chunkOrder) => {
-                            // Set the insertAfterOrder and show the chunk form for text
-                            setState(prev => ({ 
-                              ...prev, 
-                              insertAfterOrder: chunkOrder,
-                              showChunkForm: true,
-                              newChunk: {
-                                ...prev.newChunk,
-                                chunk_type: 'text',
-                                title: '',
-                                content: ''
-                              }
-                            }));
+                            // This will be handled by inline chunk creation
+                            // No modal needed
+                          }}
+                          onCreateChunkDirect={(chunkData, insertAfter) => {
+                            // Direct creation for inline chunk creation
+                            if (state.selectedDocument) {
+                              createChunkDirect(state.selectedDocument.id!, chunkData, insertAfter);
+                            }
                           }}
                           onInsertGraphicChunkAfter={(chunkOrder) => {
                             // Directly create graphic chunk between
