@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Question as BaseQuestion, ExamPage as BaseExamPage, ExamCategory as BaseExamCategory, Answer, Knowledge, KnowledgeChunk, UserProfile } from '@/types/database';
+import { Question as BaseQuestion, ExamPage as BaseExamPage, ExamCategory as BaseExamCategory, Answer, Knowledge, KnowledgeChunk, UserProfile, FreelancerProject, FreelancerProposal, ProjectCategory, ProjectType, ProjectStatus, ProposalStatus } from '@/types/database';
 
 // Local helper types (DB uses numeric ids for questions often)
 export interface QuestionLike extends Omit<BaseQuestion,'id'> { id: number | string; }
@@ -1057,6 +1057,53 @@ export const dbService = {
     }
   },
 
+  // Storage functions for image uploads
+  async uploadImage(file: File, path: string = 'knowledge-images') {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${path}/${fileName}`;
+
+      console.log('Uploading image:', { fileName, filePath, fileSize: file.size });
+
+      const { data, error } = await supabase.storage
+        .from('images') // You'll need to create this bucket in Supabase
+        .upload(filePath, file);
+
+      if (error) throw new Error(`Upload error: ${error.message}`);
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(filePath);
+
+      console.log('Image uploaded successfully:', { filePath, publicUrl });
+      
+      return {
+        path: filePath,
+        url: publicUrl,
+        fileName: fileName
+      };
+    } catch (e) {
+      console.error('uploadImage error:', e);
+      throw e;
+    }
+  },
+
+  async deleteImage(filePath: string) {
+    try {
+      const { error } = await supabase.storage
+        .from('images')
+        .remove([filePath]);
+
+      if (error) throw new Error(`Delete error: ${error.message}`);
+      return true;
+    } catch (e) {
+      console.error('deleteImage error:', e);
+      throw e;
+    }
+  },
+
   // Auth functions
   async signUp(email: string, password: string) {
     try {
@@ -1343,6 +1390,193 @@ export const dbService = {
       return true;
     } catch (e) {
       console.error('deleteTask error:', e);
+      throw e;
+    }
+  },
+
+  // Freelancer Project Management Functions
+  async getFreelancerProjects() {
+    try {
+      const { data, error } = await supabase
+        .from('freelancer_projects')
+        .select(`
+          *,
+          client:client_id(id, email, full_name),
+          freelancer:freelancer_id(id, email, full_name),
+          proposal_count:freelancer_proposals(count)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      return data || [];
+    } catch (e) {
+      console.error('getFreelancerProjects error:', e);
+      throw e;
+    }
+  },
+
+  async createFreelancerProject(project: {
+    title: string;
+    description: string;
+    category: ProjectCategory;
+    budget_min?: number;
+    budget_max?: number;
+    currency?: 'EUR' | 'USD' | 'CHF';
+    deadline?: string;
+    skills_required?: string[];
+    project_type: ProjectType;
+    remote_allowed?: boolean;
+    location?: string;
+  }) {
+    try {
+      const user = await this.getCurrentUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('freelancer_projects')
+        .insert({
+          ...project,
+          client_id: user.id,
+          currency: project.currency || 'EUR',
+          remote_allowed: project.remote_allowed ?? true
+        })
+        .select(`
+          *,
+          client:client_id(id, email, full_name),
+          freelancer:freelancer_id(id, email, full_name)
+        `)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('createFreelancerProject error:', e);
+      throw e;
+    }
+  },
+
+  async updateFreelancerProject(projectId: string, updates: {
+    title?: string;
+    description?: string;
+    category?: ProjectCategory;
+    budget_min?: number;
+    budget_max?: number;
+    deadline?: string;
+    skills_required?: string[];
+    project_type?: ProjectType;
+    remote_allowed?: boolean;
+    location?: string;
+    status?: ProjectStatus;
+    freelancer_id?: string;
+  }) {
+    try {
+      const { data, error } = await supabase
+        .from('freelancer_projects')
+        .update(updates)
+        .eq('id', projectId)
+        .select(`
+          *,
+          client:client_id(id, email, full_name),
+          freelancer:freelancer_id(id, email, full_name)
+        `)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('updateFreelancerProject error:', e);
+      throw e;
+    }
+  },
+
+  async deleteFreelancerProject(projectId: string) {
+    try {
+      const { error } = await supabase
+        .from('freelancer_projects')
+        .delete()
+        .eq('id', projectId);
+
+      if (error) throw new Error(error.message);
+      return true;
+    } catch (e) {
+      console.error('deleteFreelancerProject error:', e);
+      throw e;
+    }
+  },
+
+  async getFreelancerProposals(projectId?: string) {
+    try {
+      let query = supabase
+        .from('freelancer_proposals')
+        .select(`
+          *,
+          project:project_id(id, title, category, budget_min, budget_max, currency),
+          freelancer:freelancer_id(id, email, full_name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (projectId) {
+        query = query.eq('project_id', projectId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw new Error(error.message);
+      return data || [];
+    } catch (e) {
+      console.error('getFreelancerProposals error:', e);
+      throw e;
+    }
+  },
+
+  async createFreelancerProposal(proposal: {
+    project_id: string;
+    proposal_text: string;
+    proposed_budget?: number;
+    proposed_timeline?: number;
+  }) {
+    try {
+      const user = await this.getCurrentUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('freelancer_proposals')
+        .insert({
+          ...proposal,
+          freelancer_id: user.id
+        })
+        .select(`
+          *,
+          project:project_id(id, title, category, budget_min, budget_max, currency),
+          freelancer:freelancer_id(id, email, full_name)
+        `)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('createFreelancerProposal error:', e);
+      throw e;
+    }
+  },
+
+  async updateProposalStatus(proposalId: string, status: ProposalStatus) {
+    try {
+      const { data, error } = await supabase
+        .from('freelancer_proposals')
+        .update({ status })
+        .eq('id', proposalId)
+        .select(`
+          *,
+          project:project_id(id, title, category, budget_min, budget_max, currency),
+          freelancer:freelancer_id(id, email, full_name)
+        `)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (e) {
+      console.error('updateProposalStatus error:', e);
       throw e;
     }
   },

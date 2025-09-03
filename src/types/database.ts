@@ -105,7 +105,7 @@ export interface KnowledgeChunk {
   knowledge_id: number;
   title?: string;
   content: string;
-  chunk_type: 'text' | 'code' | 'image' | 'table' | 'list';
+  chunk_type: 'text' | 'code' | 'image' | 'table' | 'list' | 'title' | 'heading' | 'subheading' | 'graphic';
   chunk_order: number;
   word_count: number;
   tokens: number;
@@ -168,3 +168,51 @@ export interface TaskWithProfiles extends Task {
   author: UserProfile;
   assignee?: UserProfile | null;
 }
+
+export interface FreelancerProject {
+  id: string;
+  title: string;
+  description: string;
+  category: 'development' | 'design' | 'writing' | 'marketing' | 'consulting' | 'other';
+  budget_min?: number;
+  budget_max?: number;
+  currency: 'EUR' | 'USD' | 'CHF';
+  deadline?: string;
+  skills_required?: string[];
+  project_type: 'fixed' | 'hourly' | 'ongoing';
+  remote_allowed: boolean;
+  location?: string;
+  status: 'open' | 'in_progress' | 'completed' | 'cancelled';
+  client_id: string;
+  freelancer_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FreelancerProjectWithProfiles extends FreelancerProject {
+  client: UserProfile;
+  freelancer?: UserProfile;
+  proposal_count?: number;
+}
+
+export interface FreelancerProposal {
+  id: string;
+  project_id: string;
+  freelancer_id: string;
+  proposal_text: string;
+  proposed_budget?: number;
+  proposed_timeline?: number; // in days
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FreelancerProposalWithProfiles extends FreelancerProposal {
+  project: FreelancerProject;
+  freelancer: UserProfile;
+}
+
+export type ProjectCategory = 'development' | 'design' | 'writing' | 'marketing' | 'consulting' | 'other';
+export type ProjectType = 'fixed' | 'hourly' | 'ongoing';
+export type ProjectStatus = 'open' | 'in_progress' | 'completed' | 'cancelled';
+export type ProposalStatus = 'pending' | 'accepted' | 'rejected';

@@ -25,7 +25,7 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
   const [newChunk, setNewChunk] = useState({
     title: '',
     content: '',
-    chunk_type: 'text' as 'text' | 'code' | 'image' | 'table' | 'list',
+    chunk_type: 'text' as 'text' | 'code' | 'image' | 'table' | 'list' | 'title' | 'heading' | 'subheading',
     chunk_order: 1
   });
   const [newKnowledge, setNewKnowledge] = useState({
@@ -36,6 +36,16 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
     tags: '',
     is_active: true,
     document_type: 'text'
+  });
+  const [contextMenu, setContextMenu] = useState<{
+    show: boolean;
+    x: number;
+    y: number;
+    position: number;
+  }>({ show: false, x: 0, y: 0, position: 0 });
+  const [quickChunk, setQuickChunk] = useState({
+    content: '',
+    chunk_type: 'text' as 'text' | 'code' | 'image' | 'table' | 'list' | 'title' | 'heading' | 'subheading'
   });
 
   useEffect(() => {
@@ -220,6 +230,38 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
     });
     setShowCreateForm(false);
     setError(null);
+  };
+
+  const editChunk = (chunk: KnowledgeChunk) => {
+    // Filter out unsupported chunk types
+    const supportedType = (['text', 'code', 'image', 'table', 'list', 'title', 'heading', 'subheading'] as const).includes(chunk.chunk_type as any) 
+      ? chunk.chunk_type as 'text' | 'code' | 'image' | 'table' | 'list' | 'title' | 'heading' | 'subheading'
+      : 'text';
+      
+    setNewChunk({
+      title: chunk.title || '',
+      content: chunk.content,
+      chunk_type: supportedType,
+      chunk_order: chunk.chunk_order
+    });
+    setShowChunkForm(true);
+  };
+
+  const deleteChunk = async (chunkId: number) => {
+    if (!confirm('Möchten Sie diesen Chunk wirklich löschen?')) return;
+    
+    try {
+      await dbService.deleteKnowledgeChunk(chunkId);
+      if (selectedDocument) {
+        await loadKnowledgeDetail(selectedDocument.id!);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ show: false, x: 0, y: 0, position: 0 });
   };
 
   if (loading && knowledge.length === 0) {
@@ -704,113 +746,258 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
             )}
           </div>
 
-          {/* Document Content - Word-like styling */}
-          <div className="p-12 bg-zinc-900">
-            <div className="max-w-none">
-              {/* Document content with Word-like formatting */}
-              <div className="bg-zinc-800 border border-zinc-600 rounded-lg p-12 shadow-inner min-h-[600px]">
-                <div className="text-white leading-loose whitespace-pre-wrap text-lg font-light tracking-wide">
-                  {selectedDocument.content}
-                </div>
+          {/* Document Content - Integrated Chunks */}
+          <div className="p-6 bg-zinc-900 overflow-hidden">
+            <div className="max-w-4xl mx-auto">
+              {/* Document container with chunks integrated */}
+              <div 
+                className="bg-zinc-800 border border-zinc-600 rounded-lg p-8 shadow-inner min-h-[600px] overflow-hidden"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const y = e.clientY - rect.top;
+                  const chunkElements = Array.from(e.currentTarget.children);
+                  let insertPosition = chunks.length + 1;
+                  
+                  // Finde die richtige Position basierend auf der Y-Koordinate
+                  for (let i = 0; i < chunkElements.length; i++) {
+                    const element = chunkElements[i] as HTMLElement;
+                    const elementRect = element.getBoundingClientRect();
+                    const elementY = elementRect.top - rect.top;
+                    
+                    if (y < elementY + elementRect.height / 2) {
+                      insertPosition = i + 1;
+                      break;
+                    }
+                  }
+                  
+                  setContextMenu({
+                    show: true,
+                    x: e.clientX,
+                    y: e.clientY,
+                    position: insertPosition
+                  });
+                }}
+              >
+                {chunks.length === 0 ? (
+                  <div className="text-center py-12 text-zinc-400">
+                    <div className="text-lg mb-2">Leeres Dokument</div>
+                    <div className="text-sm">
+                      Rechtsklick um deinen ersten Chunk hinzuzufügen.
+                    </div>
+                  </div>
+                ) : (
+                  chunks.map((chunk, index) => (
+                    <div key={chunk.id} className="mb-1 group relative hover:bg-zinc-700/30 rounded p-2 transition-colors">
+                      {chunk.chunk_type === 'title' && (
+                        <h1 className="text-3xl font-bold text-white mb-6 leading-tight">
+                          {chunk.title || chunk.content}
+                        </h1>
+                      )}
+                      {chunk.chunk_type === 'heading' && (
+                        <h2 className="text-2xl font-semibold text-white mb-4 leading-tight">
+                          {chunk.title || chunk.content}
+                        </h2>
+                      )}
+                      {chunk.chunk_type === 'subheading' && (
+                        <h3 className="text-xl font-medium text-white mb-3 leading-tight">
+                          {chunk.title || chunk.content}
+                        </h3>
+                      )}
+                      {chunk.chunk_type === 'text' && (
+                        <div className="mb-4">
+                          {chunk.title && (
+                            <h4 className="text-lg font-medium text-white mb-2 break-words">{chunk.title}</h4>
+                          )}
+                          <p className="text-zinc-200 text-base leading-relaxed whitespace-pre-wrap break-all overflow-hidden">
+                            {chunk.content}
+                          </p>
+                        </div>
+                      )}
+                      {chunk.chunk_type === 'list' && (
+                        <div className="mb-4">
+                          {chunk.title && (
+                            <h4 className="text-lg font-medium text-white mb-2">{chunk.title}</h4>
+                          )}
+                          <ul className="list-disc pl-6 text-zinc-200 text-base leading-relaxed">
+                            {chunk.content.split('\n').filter(line => line.trim()).map((item, i) => (
+                              <li key={i} className="mb-1">{item.replace(/^[-*•]\s*/, '')}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {chunk.chunk_type === 'code' && (
+                        <div className="mb-4">
+                          {chunk.title && (
+                            <h4 className="text-lg font-medium text-white mb-2 break-words">{chunk.title}</h4>
+                          )}
+                          <pre className="bg-zinc-900 border border-zinc-700 rounded p-4 text-sm font-mono text-zinc-200 overflow-hidden">
+                            <code className="break-all whitespace-pre-wrap">{chunk.content}</code>
+                          </pre>
+                        </div>
+                      )}
+                      {chunk.chunk_type === 'table' && (
+                        <div className="mb-4">
+                          {chunk.title && (
+                            <h4 className="text-lg font-medium text-white mb-2 break-words">{chunk.title}</h4>
+                          )}
+                          <div className="border border-zinc-600 rounded overflow-x-auto max-w-full">
+                            <table className="w-full text-sm min-w-max">
+                              <tbody>
+                                {chunk.content.split('\n').filter(line => line.trim()).map((row, i) => (
+                                  <tr key={i} className={i === 0 ? 'bg-zinc-700 text-white font-medium' : 'bg-zinc-800 text-zinc-200'}>
+                                    {row.split('|').filter(cell => cell.trim()).map((cell, j) => (
+                                      <td key={j} className="border-r border-zinc-600 px-3 py-2 last:border-r-0 break-words max-w-xs">
+                                        {cell.trim()}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Edit Controls - nur bei Hover sichtbar */}
+                      <div className="absolute -right-2 top-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex flex-col gap-1">
+                          <button
+                            onClick={() => editChunk(chunk)}
+                            className="w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs flex items-center justify-center"
+                            title="Bearbeiten"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            onClick={() => deleteChunk(chunk.id!)}
+                            className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded text-xs flex items-center justify-center"
+                            title="Löschen"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
 
-          {/* Chunks Section */}
-          <div className="border-t border-zinc-600 bg-zinc-800 p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-white">
-                Knowledge Chunks ({chunks.length})
-              </h3>
+          {/* Floating Add Chunk Button - nur im Document Tab */}
+          {activeTab === 'document' && (
+            <div className="fixed bottom-6 right-6 z-40">
               <button
                 onClick={() => setShowChunkForm(!showChunkForm)}
-                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-medium transition-colors"
+                className="w-12 h-12 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg flex items-center justify-center text-xl font-bold transition-all transform hover:scale-105"
+                title="Chunk hinzufügen"
               >
-                {showChunkForm ? 'Cancel' : 'Add Chunk'}
+                +
               </button>
             </div>
+          )}
 
-            {/* Add Chunk Form */}
-            {showChunkForm && (
-              <div className="mb-8 p-6 bg-zinc-900 rounded-lg border border-zinc-600">
-                <h4 className="font-medium text-white mb-4 text-lg">Add New Chunk</h4>
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    placeholder="Chunk title (optional)"
-                    value={newChunk.title}
-                    onChange={(e) => setNewChunk(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white placeholder-zinc-400 text-sm focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
-                  />
-                  <textarea
-                    placeholder="Chunk content"
-                    value={newChunk.content}
-                    onChange={(e) => setNewChunk(prev => ({ ...prev, content: e.target.value }))}
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white placeholder-zinc-400 text-sm h-32 resize-none focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
-                    required
-                  />
-                  <div className="flex gap-3">
-                    <select
-                      value={newChunk.chunk_type}
-                      onChange={(e) => setNewChunk(prev => ({ ...prev, chunk_type: e.target.value as any }))}
-                      className="px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
-                    >
-                      <option value="text">Text</option>
-                      <option value="code">Code</option>
-                      <option value="image">Image</option>
-                      <option value="table">Table</option>
-                      <option value="list">List</option>
-                    </select>
+          {/* Floating Add Chunk Form */}
+          {showChunkForm && (
+            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl w-full max-w-lg my-8">
+                <div className="p-6">
+                  <h4 className="font-medium text-white mb-4 text-lg">Neuen Chunk hinzufügen</h4>
+                  <div className="space-y-4">
                     <input
-                      type="number"
-                      placeholder="Order"
-                      value={newChunk.chunk_order}
-                      onChange={(e) => setNewChunk(prev => ({ ...prev, chunk_order: parseInt(e.target.value) || 1 }))}
-                      className="w-24 px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
-                      min="1"
+                      type="text"
+                      placeholder="Titel (optional)"
+                      value={newChunk.title}
+                      onChange={(e) => setNewChunk(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white placeholder-zinc-400 text-sm focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
                     />
+                    <textarea
+                      placeholder="Inhalt eingeben..."
+                      value={newChunk.content}
+                      onChange={(e) => setNewChunk(prev => ({ ...prev, content: e.target.value }))}
+                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white placeholder-zinc-400 text-sm h-32 resize-none focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
+                      required
+                    />
+                    <div className="flex gap-3">
+                      <select
+                        value={newChunk.chunk_type}
+                        onChange={(e) => setNewChunk(prev => ({ ...prev, chunk_type: e.target.value as any }))}
+                        className="px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
+                      >
+                        <option value="title">Titel</option>
+                        <option value="heading">Überschrift</option>
+                        <option value="subheading">Unterüberschrift</option>
+                        <option value="text">Text</option>
+                        <option value="list">Liste</option>
+                        <option value="code">Code</option>
+                        <option value="table">Tabelle</option>
+                        <option value="image">Bild</option>
+                      </select>
+                      <input
+                        type="number"
+                        placeholder="Position"
+                        value={newChunk.chunk_order}
+                        onChange={(e) => setNewChunk(prev => ({ ...prev, chunk_order: parseInt(e.target.value) || 1 }))}
+                        className="w-24 px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
+                        min="1"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 mt-6">
                     <button
-                      onClick={() => createChunk(selectedDocument.id)}
-                      className="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-medium transition-colors"
+                      onClick={() => selectedDocument && createChunk(selectedDocument.id!)}
+                      className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
                     >
-                      Add Chunk
+                      Chunk erstellen
+                    </button>
+                    <button
+                      onClick={() => setShowChunkForm(false)}
+                      className="px-4 py-3 bg-zinc-600 hover:bg-zinc-500 text-white rounded-lg text-sm transition-colors"
+                    >
+                      Abbrechen
                     </button>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
+          )}
+        </div>
+      )}
 
-            {/* Chunks List */}
-            <div className="space-y-4">
-              {chunks.map((chunk) => (
-                <div key={chunk.id} className="bg-zinc-900 rounded-lg border border-zinc-600 p-6 hover:border-zinc-500 transition-colors">
-                  <div className="flex items-center justify-between mb-3">
-                    {chunk.title && (
-                      <h5 className="font-medium text-white text-base">{chunk.title}</h5>
-                    )}
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs px-3 py-1 bg-zinc-700 text-zinc-300 rounded-full">
-                        {chunk.chunk_type}
-                      </span>
-                      <span className="text-xs text-zinc-400">#{chunk.chunk_order}</span>
-                    </div>
-                  </div>
-                  <p className="text-zinc-200 text-sm mb-3 leading-relaxed">{chunk.content}</p>
-                  <div className="text-xs text-zinc-400 flex gap-4">
-                    <span>{chunk.word_count} words</span>
-                    <span>•</span>
-                    <span>{chunk.tokens} tokens</span>
-                  </div>
-                </div>
-              ))}
-              {chunks.length === 0 && (
-                <div className="text-center py-12 text-zinc-400">
-                  <div className="text-lg mb-2">No chunks yet</div>
-                  <div className="text-sm text-zinc-500">
-                    Add your first chunk above to break down this document into smaller, manageable pieces.
-                  </div>
-                </div>
-              )}
+      {/* Context Menu for Chunk Creation */}
+      {contextMenu.show && (
+        <div
+          className="fixed inset-0 z-50"
+          onClick={closeContextMenu}
+        >
+          <div
+            className="absolute rounded-lg bg-zinc-800 border border-zinc-700 shadow-lg min-w-48"
+            style={{ 
+              top: Math.min(contextMenu.y, window.innerHeight - 120), 
+              left: Math.min(contextMenu.x, window.innerWidth - 200) 
+            }}
+          >
+            <div className="flex flex-col p-4">
+              <span className="text-sm text-zinc-400 mb-2">Create chunk at position:</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setNewChunk(prev => ({ ...prev, chunk_order: contextMenu.position }));
+                    setShowChunkForm(true);
+                    closeContextMenu();
+                  }}
+                  className="flex-1 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-medium"
+                >
+                  Position {contextMenu.position}
+                </button>
+                <button
+                  onClick={closeContextMenu}
+                  className="px-4 py-2 bg-zinc-600 hover:bg-zinc-500 text-white rounded-lg text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>

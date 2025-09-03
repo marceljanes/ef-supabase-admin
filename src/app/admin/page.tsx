@@ -18,7 +18,7 @@ import QuestionPromptBuilder from '@/components/QuestionPromptBuilder';
 import UpdateQuestions from '@/components/UpdateQuestions';
 import ExamTrainer from '@/components/ExamTrainer';
 import PMI from '@/components/PMI';
-import KnowledgeManager from '@/components/KnowledgeManager';
+import KnowledgeManager from '@/components/KnowledgeManager/index';
 import UserManager from '@/components/UserManager';
 import { 
   BookOpen, 
@@ -34,7 +34,8 @@ import {
   Moon,
   Users,
   Kanban,
-  Brain
+  Brain,
+  Briefcase
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -50,6 +51,7 @@ export default function AdminDashboard() {
   const [searchText, setSearchText] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [showRecentlyUpdated, setShowRecentlyUpdated] = useState<boolean>(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [saving, setSaving] = useState(false);
   const [examCategories, setExamCategories] = useState<string[]>([]);
@@ -73,6 +75,30 @@ export default function AdminDashboard() {
   // Apply category filter if a specific category is selected
   if (selectedCategory !== '') {
     filteredQuestions = filteredQuestions.filter(q => q.category === selectedCategory);
+  }
+  
+  // Apply recently updated filter (last 6 months)
+  if (showRecentlyUpdated) {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const FIVE_MIN = 5 * 60 * 1000;
+    
+    filteredQuestions = filteredQuestions.filter(q => {
+      if (!q.updated_at || !q.created_at) return false;
+      if (isNaN(Date.parse(q.updated_at)) || isNaN(Date.parse(q.created_at))) return false;
+      
+      const updatedDate = new Date(q.updated_at);
+      const createdDate = new Date(q.created_at);
+      
+      // Check if updated in last 6 months
+      if (updatedDate < sixMonthsAgo) return false;
+      
+      // Exclude updates within first 5 minutes of creation (unless corrupted timestamps)
+      const diff = updatedDate.getTime() - createdDate.getTime();
+      if (diff >= 0 && diff < FIVE_MIN) return false;
+      
+      return true;
+    });
   }
   
   // Apply text search filter if search text is provided
@@ -112,7 +138,10 @@ export default function AdminDashboard() {
       if(!q.updated_at || isNaN(Date.parse(q.updated_at))) return false; // must have valid updated_at
       if(!q.created_at || isNaN(Date.parse(q.created_at))) return false; // require valid created_at to count as an update (prevents new creations from appearing here)
       const diff = new Date(q.updated_at).getTime() - new Date(q.created_at).getTime();
-      if(diff < 0) return false; // corrupted timestamps
+      if(diff < 0) {
+        console.warn('Corrupted timestamps found for question:', q.id, 'updated_at before created_at');
+        return true; // Include corrupted entries but mark them
+      }
       if(diff < FIVE_MIN) return false; // exclude updates within first 5 minutes of creation
       return true;
     });
@@ -377,7 +406,7 @@ export default function AdminDashboard() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-1 px-2 py-1 border-b-2 transition-colors text-xs ${
+                className={`flex items-center space-x-2 px-3 py-2 border-b-2 transition-colors text-sm ${
                   activeTab === tab.id
                     ? 'border-green-500 text-green-500'
                     : 'border-transparent text-zinc-400 hover:text-zinc-300 hover:border-zinc-400'
@@ -498,20 +527,24 @@ export default function AdminDashboard() {
                 <div className="bg-zinc-900 border border-zinc-700 rounded-lg">
                   <div className="p-4 border-b border-zinc-700 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-white">Recently Updated (latest 10)</h3>
-                    <span className="text-[10px] text-zinc-500">updated_at</span>
+                    <span className="text-[10px] text-zinc-500">any timespan</span>
                   </div>
                   <ul className="divide-y divide-zinc-800 max-h-80 overflow-auto text-sm">
-                    {recentUpdated.length===0 && <li className="p-3 text-zinc-500 text-xs">No recent updates.</li>}
-                    {recentUpdated.map(q=> (
+                    {recentUpdated.length===0 && <li className="p-3 text-zinc-500 text-xs">No updates found (excludes first 5min after creation).</li>}
+                    {recentUpdated.map(q=> {
+                      const hasCorruptedTimestamps = q.updated_at && q.created_at && 
+                        new Date(q.updated_at).getTime() < new Date(q.created_at).getTime();
+                      return (
                       <li key={q.id} onClick={()=>openRecentQuestion(q)} className="p-3 flex flex-col gap-1 hover:bg-zinc-800/50 cursor-pointer group">
                         <div className="flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                          <span className={`w-1.5 h-1.5 rounded-full ${hasCorruptedTimestamps ? 'bg-red-400' : 'bg-green-400'}`} />
                           <span className="text-xs text-zinc-400">{q.exam_code}</span>
+                          {hasCorruptedTimestamps && <span className="text-[9px] text-red-400 font-mono">⚠</span>}
                           <span className="text-[10px] text-zinc-500 ml-auto">{new Date(q.updated_at).toLocaleString()}</span>
                         </div>
                         <div className="text-xs text-zinc-200 line-clamp-2 group-hover:underline">{q.question}</div>
                       </li>
-                    ))}
+                    );})}
                   </ul>
                 </div>
               </div>
@@ -563,6 +596,7 @@ export default function AdminDashboard() {
                         setCurrentPage(1);
                         setSearchText('');
                         setSelectedCategory('');
+                        setShowRecentlyUpdated(false);
                         loadQuestionsForExamCode(examCode);
                       }}
                       className={`px-3 py-2 text-sm rounded-md transition-colors ${
@@ -580,6 +614,37 @@ export default function AdminDashboard() {
                 )}
               </div>
             </div>
+
+            {/* Additional Filters */}
+            {selectedExamCode && (
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Eye className="h-4 w-4 text-zinc-400" />
+                  <span className="text-sm text-zinc-400">Additional Filters:</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      setShowRecentlyUpdated(!showRecentlyUpdated);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-3 py-2 text-sm rounded-md transition-colors flex items-center space-x-2 ${
+                      showRecentlyUpdated
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                    }`}
+                  >
+                    <Eye className="h-3 w-3" />
+                    <span>Updated Last 6 Months</span>
+                    {showRecentlyUpdated && (
+                      <span className="text-xs bg-blue-500/20 px-1.5 py-0.5 rounded">
+                        {filteredQuestions.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {!selectedExamCode && (
               <div className="py-16 border border-dashed border-zinc-700 rounded-lg text-center text-sm text-zinc-400 bg-zinc-900/40">
