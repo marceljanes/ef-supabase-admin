@@ -42,9 +42,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!mounted) return;
     
     try {
-      // Reduced timeout to 3 seconds for faster loading
+      // Increased timeout to 15 seconds for better stability
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Auth check timeout')), 3000)
+        setTimeout(() => reject(new Error('Auth check timeout')), 15000)
       );
       
       const authPromise = (async () => {
@@ -64,6 +64,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
     } catch (error) {
       console.error('Auth check failed:', error);
+      // Don't immediately logout on errors - could be temporary network issues
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('timeout')) {
+        console.warn('Auth check timeout - keeping existing session');
+        return;
+      }
       setUser(null);
       setUserProfile(null);
     } finally {
@@ -88,10 +94,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (!mounted) return;
 
-    // Force loading to false after 2 seconds max
+    // Force loading to false after 10 seconds max
     const maxLoadingTimeout = setTimeout(() => {
       setLoading(false);
-    }, 2000);
+    }, 10000);
 
     checkAuth().finally(() => {
       clearTimeout(maxLoadingTimeout);

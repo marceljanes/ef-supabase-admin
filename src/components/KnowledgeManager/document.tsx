@@ -19,6 +19,7 @@ interface DocumentHeaderProps {
   onCloseDocument: () => void;
   onToggleTheme: () => void;
   onRenumberChunks?: () => void;
+  onInsertKnowledge?: (sections: Array<{title: string; content: string}>) => void;
 }
 
 export const DocumentHeader: React.FC<DocumentHeaderProps> = ({
@@ -27,24 +28,110 @@ export const DocumentHeader: React.FC<DocumentHeaderProps> = ({
   onEditDocument,
   onCloseDocument,
   onToggleTheme,
-  onRenumberChunks
+  onRenumberChunks,
+  onInsertKnowledge
 }) => {
   const formattedDate = useSafeDate(selectedDocument.updated_at);
+  const [showInsertModal, setShowInsertModal] = useState(false);
+  const [insertContent, setInsertContent] = useState('');
+  const [parseError, setParseError] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [parsedSections, setParsedSections] = useState<Array<{title: string; content: string}>>([]);
+
+  const parseHtmlSections = (html: string): Array<{title: string; content: string}> | null => {
+    // Reset error state
+    setParseError('');
+    
+    try {
+      // Normalize whitespace for consistent parsing
+      const normalizedHtml = html
+        .trim() // Remove leading/trailing whitespace
+        .replace(/\s+/g, ' ') // Normalize all whitespace to single spaces
+        .replace(/(<\/section>)\s*(<section>)/g, '$1$2'); // Remove whitespace between sections
+      
+      // More flexible regex that handles whitespace inside sections
+      const sectionRegex = /<section>\s*<h1>\s*(.*?)\s*<\/h1>\s*(.*?)\s*<\/section>/gi;
+      const matches = [];
+      let match;
+      
+      while ((match = sectionRegex.exec(normalizedHtml)) !== null) {
+        matches.push(match);
+      }
+      
+      if (matches.length === 0) {
+        setParseError('Ungültiges Format. Erwartetes Format: <section><h1>Titel</h1>Inhalt...</section>');
+        return null;
+      }
+      
+      // More lenient validation - check if we have valid sections without requiring exact match
+      const totalLength = matches.reduce((sum, match) => sum + match[0].length, 0);
+      const cleanLength = normalizedHtml.replace(/\s/g, '').length;
+      const matchedLength = matches.map(match => match[0]).join('').replace(/\s/g, '').length;
+      
+      // Allow for minor whitespace differences
+      if (Math.abs(cleanLength - matchedLength) > 10) {
+        setParseError('Der Inhalt enthält ungültiges HTML außerhalb der <section> Tags.');
+        return null;
+      }
+      
+      return matches.map(match => ({
+        title: match[1].trim(),
+        content: match[2].trim().replace(/<\/?p>/g, '') // Strip <p> and </p> tags while preserving content
+      }));
+    } catch (error) {
+      setParseError('Fehler beim Parsen des HTML-Inhalts.');
+      return null;
+    }
+  };
+
+  const handleInsertKnowledge = () => {
+    if (!insertContent.trim()) {
+      setParseError('Bitte geben Sie Inhalt ein.');
+      return;
+    }
+
+    const sections = parseHtmlSections(insertContent.trim());
+    if (sections && sections.length > 0 && onInsertKnowledge) {
+      onInsertKnowledge(sections);
+      setInsertContent('');
+      setShowInsertModal(false);
+      setParseError('');
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowInsertModal(false);
+    setInsertContent('');
+    setParseError('');
+  };
 
   return (
-    <div className="bg-zinc-800 border-b border-zinc-600 p-8">
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex-1">
-          <h1 className="text-4xl font-bold text-white mb-3 leading-tight">{selectedDocument.title}</h1>
-          <div className="flex items-center gap-6 text-base text-zinc-300">
-            <span className="bg-zinc-700 px-3 py-1 rounded-full">{selectedDocument.document_type}</span>
-            <span>{selectedDocument.word_count} words</span>
-            <span>{selectedDocument.reading_time_minutes} minutes read</span>
-            <span>Updated {formattedDate}</span>
+    <>
+      <div className="bg-zinc-800 border-b border-zinc-600 p-8">
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex-1">
+            <h1 className="text-4xl font-bold text-white mb-3 leading-tight">{selectedDocument.title}</h1>
+            <div className="flex items-center gap-6 text-base text-zinc-300">
+              <span className="bg-zinc-700 px-3 py-1 rounded-full">{selectedDocument.document_type}</span>
+              <span>{selectedDocument.word_count} words</span>
+              <span>{selectedDocument.reading_time_minutes} minutes read</span>
+              <span>Updated {formattedDate}</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowInsertModal(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              title="Strukturierten Inhalt als Chunks importieren"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Insert Knowledge
+            </button>
           </div>
         </div>
-        
-      </div>
 
       {selectedDocument.category && (
         <div className="mb-3">
@@ -69,6 +156,143 @@ export const DocumentHeader: React.FC<DocumentHeaderProps> = ({
         </div>
       )}
     </div>
+
+      {/* Insert Knowledge Modal */}
+      {showInsertModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-zinc-700 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-white">Insert Knowledge</h2>
+              <button
+                onClick={handleCloseModal}
+                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto">
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-zinc-300 text-sm">
+                    Format: <code className="bg-zinc-800 px-2 py-1 rounded text-blue-300">&lt;section&gt;&lt;h1&gt;Titel&lt;/h1&gt;Inhalt...&lt;/section&gt;</code>
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowPreview(!showPreview);
+                      if (!showPreview && insertContent.trim()) {
+                        const sections = parseHtmlSections(insertContent.trim());
+                        if (sections) {
+                          setParsedSections(sections);
+                        }
+                      }
+                    }}
+                    className="p-1 text-zinc-400 hover:text-blue-400 rounded transition-colors"
+                    title="Vorschau der geparsten Sections anzeigen"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                </div>
+                <p className="text-zinc-400 text-xs">
+                  Jede Section wird als separater Chunk erstellt, mit dem h1-Text als Titel (optional).
+                </p>
+              </div>
+              
+              <textarea
+                value={insertContent}
+                onChange={(e) => {
+                  setInsertContent(e.target.value);
+                  // Update preview in real-time if preview is open
+                  if (showPreview && e.target.value.trim()) {
+                    const sections = parseHtmlSections(e.target.value.trim());
+                    if (sections) {
+                      setParsedSections(sections);
+                    } else {
+                      setParsedSections([]);
+                    }
+                  }
+                }}
+                placeholder="<section><h1>Beispiel Titel</h1>Hier ist der Inhalt der ersten Section...</section><section><h1>Zweiter Titel</h1>Und hier der Inhalt der zweiten Section...</section>"
+                className="w-full h-64 px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white placeholder-zinc-500 text-sm font-mono resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+
+              {/* Preview Section */}
+              {showPreview && (
+                <div className="mt-4 p-4 bg-zinc-800 border border-zinc-600 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-zinc-200 text-sm font-medium">Vorschau der geparsten Sections</h3>
+                    <span className="text-zinc-400 text-xs">
+                      {parsedSections.length} {parsedSections.length === 1 ? 'Chunk' : 'Chunks'} erkannt
+                    </span>
+                  </div>
+                  
+                  {parsedSections.length > 0 ? (
+                    <div className="space-y-4 max-h-60 overflow-y-auto">
+                      {parsedSections.map((section, index) => (
+                        <div key={index} className="p-3 bg-zinc-700 rounded border border-zinc-600">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-6 h-6 bg-blue-600 rounded text-white text-xs flex items-center justify-center font-medium">
+                              {index + 1}
+                            </div>
+                            <span className="text-blue-300 text-sm font-medium">
+                              Chunk {index + 1}
+                            </span>
+                          </div>
+                          <div className="pl-8">
+                            <div className="mb-2">
+                              <span className="text-zinc-400 text-xs">Titel:</span>
+                              <div className="text-zinc-200 text-sm font-medium">
+                                {section.title || <em className="text-zinc-500">Kein Titel</em>}
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-zinc-400 text-xs">Inhalt:</span>
+                              <div className="text-zinc-300 text-sm bg-zinc-800 p-2 rounded mt-1 max-h-20 overflow-y-auto">
+                                {section.content || <em className="text-zinc-500">Kein Inhalt</em>}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-zinc-500 text-sm italic text-center py-4">
+                      Noch keine gültigen Sections erkannt. Bitte geben Sie HTML im korrekten Format ein.
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {parseError && (
+                <div className="mt-3 p-3 bg-red-900/20 border border-red-700 rounded-lg">
+                  <p className="text-red-300 text-sm">{parseError}</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 border-t border-zinc-700 flex justify-end gap-3">
+              <button
+                onClick={handleCloseModal}
+                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleInsertKnowledge}
+                disabled={!insertContent.trim()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm transition-colors"
+              >
+                Chunks erstellen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

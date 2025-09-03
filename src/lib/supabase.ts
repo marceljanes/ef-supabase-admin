@@ -222,7 +222,8 @@ export const dbService = {
         .from('questions')
         .select('*', { count: 'exact' })
         .range(startIndex, startIndex + limit - 1)
-        .order('id', { ascending: true });
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
 
       if (error) {
         throw new Error(`Error fetching questions: ${error.message}`);
@@ -278,7 +279,8 @@ export const dbService = {
       const { data: questions, error: questionsError } = await supabase
         .from('questions')
         .select('*')
-        .order('id', { ascending: true });
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
 
       if (questionsError) {
         throw new Error(`Error fetching questions: ${questionsError.message}`);
@@ -351,7 +353,8 @@ export const dbService = {
         .select('*')
         .not('exam_code', 'is', null)
         .order('exam_code', { ascending: true })
-        .order('id', { ascending: true });
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
 
       if (error) {
         throw new Error(`Error fetching questions with exam_code: ${error.message}`);
@@ -375,7 +378,8 @@ export const dbService = {
         .from('questions')
         .select('*')
         .eq('exam_code', examCode)
-        .order('id', { ascending: true });
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
 
       if (questionsError) {
         throw new Error(`Error fetching questions for exam code ${examCode}: ${questionsError.message}`);

@@ -136,6 +136,55 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
     }));
   };
 
+  // Handle bulk insertion of knowledge chunks from parsed HTML
+  const handleInsertKnowledge = async (sections: Array<{title: string; content: string}>) => {
+    if (!state.selectedDocument || sections.length === 0) return;
+
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      
+      // Get the current highest chunk order to append new chunks at the end
+      const sortedChunks = [...state.chunks].sort((a, b) => a.chunk_order - b.chunk_order);
+      let insertAfterOrder: number | null = null;
+      
+      if (sortedChunks.length > 0) {
+        insertAfterOrder = sortedChunks[sortedChunks.length - 1].chunk_order;
+      }
+
+      // Create chunks sequentially to maintain order
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        
+        const chunkData = {
+          chunk_type: 'text' as const,
+          title: section.title.trim() || `Section ${i + 1}`,
+          content: section.content.trim(),
+          chunk_order: 0 // Will be calculated by createChunkDirect
+        };
+
+        // Create chunk - createChunkDirect doesn't return the chunk but updates state
+        await createChunkDirect(state.selectedDocument.id!, chunkData, insertAfterOrder || undefined);
+        
+        // Calculate next insertAfterOrder based on 100er system
+        if (insertAfterOrder !== null) {
+          insertAfterOrder = insertAfterOrder + 100;
+        } else {
+          insertAfterOrder = 100; // First chunk gets 100, next will be 200, etc.
+        }
+      }
+
+      setState(prev => ({ ...prev, loading: false }));
+      
+    } catch (error) {
+      console.error('Error inserting knowledge sections:', error);
+      setState(prev => ({ 
+        ...prev, 
+        loading: false,
+        error: `Fehler beim Einfügen der Knowledge-Bereiche: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}` 
+      }));
+    }
+  };
+
   if (state.loading && state.knowledge.length === 0) {
     return <LoadingSpinner className={className} />;
   }
@@ -269,6 +318,7 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
               ...prev, 
               documentTheme: prev.documentTheme === 'dark' ? 'light' : 'dark' 
             }))}
+            onInsertKnowledge={handleInsertKnowledge}
           />
 
           {/* Document Content */}
