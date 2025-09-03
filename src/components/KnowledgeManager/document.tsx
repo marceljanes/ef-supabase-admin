@@ -333,6 +333,7 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
   const [editTitle, setEditTitle] = useState(chunk.title || '');
   const [editContent, setEditContent] = useState(chunk.content || '');
   const [editType, setEditType] = useState(chunk.chunk_type || 'text');
+  const [pasteIndicator, setPasteIndicator] = useState(false);
   
   // State for inline chunk creation
   const [newChunkTitle, setNewChunkTitle] = useState('');
@@ -345,6 +346,50 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
     setEditContent(chunk.content || '');
     setEditType(chunk.chunk_type || 'text');
   }, [chunk.title, chunk.content, chunk.chunk_type]);
+
+  // Handle clipboard paste for images
+  React.useEffect(() => {
+    const handlePaste = async (event: ClipboardEvent) => {
+      // Only handle paste if we're not currently editing a chunk
+      if (isEditing || isCreating) return;
+
+      const clipboardData = event.clipboardData;
+      if (!clipboardData) return;
+
+      // Check if clipboard contains images
+      const items = Array.from(clipboardData.items);
+      const imageItem = items.find(item => item.type.startsWith('image/'));
+      
+      if (imageItem && onInsertImageChunkAfter) {
+        event.preventDefault();
+        
+        // Show paste indicator
+        setPasteIndicator(true);
+        
+        try {
+          // Convert clipboard item to file
+          const file = imageItem.getAsFile();
+          if (file) {
+            // Create image chunk after current chunk
+            await onInsertImageChunkAfter(chunk.chunk_order, file);
+            
+            // Show success feedback briefly
+            setTimeout(() => setPasteIndicator(false), 1500);
+          }
+        } catch (error) {
+          console.error('Error pasting image:', error);
+          setPasteIndicator(false);
+        }
+      }
+    };
+
+    // Add paste event listener to document
+    document.addEventListener('paste', handlePaste);
+    
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, [isEditing, isCreating, chunk.chunk_order, onInsertImageChunkAfter]);
 
   const handleSaveEdit = () => {
     // Use direct update to bypass modal
@@ -754,6 +799,10 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
         ? 'scale-105 shadow-lg ring-2 ring-blue-400 ring-opacity-50'
         : ''
     } ${
+      pasteIndicator
+        ? 'ring-2 ring-green-400 ring-opacity-70 bg-green-500/10'
+        : ''
+    } ${
       documentTheme === 'light' 
         ? 'hover:bg-gray-50 hover:shadow-sm' 
         : 'hover:bg-zinc-700/20 hover:shadow-lg hover:shadow-zinc-900/20'
@@ -769,6 +818,18 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
             <span className="text-sm font-medium">Verschieben...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Paste indicator overlay */}
+      {pasteIndicator && (
+        <div className="absolute inset-0 bg-green-500/10 rounded-lg flex items-center justify-center">
+          <div className="flex items-center gap-2 text-green-600">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="text-sm font-medium">Bild eingefügt!</span>
           </div>
         </div>
       )}
@@ -919,6 +980,7 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
                       ? 'hover:bg-gray-100 text-gray-700'
                       : 'hover:bg-zinc-700 text-zinc-200'
                   }`}
+                  title="Bild aus Datei auswählen oder Strg+V zum Einfügen aus Zwischenablage"
                 >
                   <span className="text-purple-500">🖼️</span>
                   Bild
