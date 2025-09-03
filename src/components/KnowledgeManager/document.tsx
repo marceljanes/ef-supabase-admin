@@ -614,7 +614,7 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
                 documentTheme === 'light' ? 'text-black' : 'text-white'
               }`}>{chunk.title}</h4>
             )}
-            <div className={`text-base leading-relaxed whitespace-pre-wrap break-words overflow-hidden ${
+            <div className={`text-base leading-relaxed whitespace-pre-wrap break-words ${
               documentTheme === 'light' ? 'text-black' : 'text-zinc-200'
             }`}>
               {renderFormattedText(chunk.content)}
@@ -739,11 +739,11 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
         );
       default:
         return (
-          <p className={`text-base leading-relaxed whitespace-pre-wrap break-all overflow-hidden ${
-            documentTheme === 'light' ? 'text-black' : 'text-zinc-200'
-          }`}>
-            {chunk.content}
-          </p>
+        <p className={`text-base leading-relaxed whitespace-pre-wrap break-words ${
+          documentTheme === 'light' ? 'text-black' : 'text-zinc-200'
+        }`}>
+          {chunk.content}
+        </p>
         );
     }
   };
