@@ -136,7 +136,7 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
                 documentTheme === 'light' ? 'text-black' : 'text-white'
               }`}>{chunk.title}</h4>
             )}
-            <p className={`text-base leading-relaxed whitespace-pre-wrap break-all overflow-hidden ${
+            <p className={`text-base leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere ${
               documentTheme === 'light' ? 'text-black' : 'text-zinc-200'
             }`}>
               {chunk.content}
@@ -510,14 +510,26 @@ export const ChunkForm: React.FC<ChunkFormProps> = ({
   const [titleFocused, setTitleFocused] = useState(false);
   const [contentFocused, setContentFocused] = useState(false);
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto">
-      <div className={`bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl my-4 ${
-        newChunk.content.type === 'graphic' ? 'w-full max-w-5xl max-h-[90vh] overflow-y-auto' : 'w-full max-w-lg'
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className={`bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-h-[95vh] overflow-y-auto ${
+        newChunk.content.type === 'graphic' ? 'w-full max-w-6xl' : 'w-full max-w-lg'
       }`}>
-        <div className="p-6">
-          <h4 className="font-medium text-white mb-4 text-lg">
+        {/* Close button - always visible at the top */}
+        <div className="sticky top-0 bg-zinc-900 border-b border-zinc-700 p-4 flex justify-between items-center">
+          <h4 className="font-medium text-white text-lg">
             {isEditing ? 'Chunk bearbeiten' : 'Neuen Chunk hinzufügen'}
           </h4>
+          <button
+            onClick={onCancel}
+            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
+            title="Schließen"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-6">
           <div className="space-y-4">
             <input
               type="text"
@@ -529,7 +541,7 @@ export const ChunkForm: React.FC<ChunkFormProps> = ({
               className="w-full px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white placeholder-zinc-400 text-sm focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
             />
                           {newChunk.content.type === 'graphic' && (
-                <div className="h-96 border border-zinc-600 rounded-lg p-2 overflow-hidden">
+                <div className="h-80 border border-zinc-600 rounded-lg p-2 overflow-hidden">
                   <GraphicEditor
                     shapes={typeof newChunk.content === 'object' && newChunk.content.graphic?.shapes || []}
                     theme={documentTheme}
@@ -598,12 +610,6 @@ export const ChunkForm: React.FC<ChunkFormProps> = ({
               className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
             >
               {isEditing ? 'Chunk aktualisieren' : 'Chunk erstellen'}
-            </button>
-            <button
-              onClick={onCancel}
-              className="px-4 py-3 bg-zinc-600 hover:bg-zinc-500 text-white rounded-lg text-sm transition-colors"
-            >
-              Abbrechen
             </button>
           </div>
         </div>

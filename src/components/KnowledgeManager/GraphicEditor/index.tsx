@@ -35,7 +35,7 @@ type DragState =
       last: { x: number; y: number };
     };
 
-export const GraphicEditor: React.FC<GraphicEditorProps> = ({
+const GraphicEditor: React.FC<GraphicEditorProps> = ({
   shapes,
   onChange,
   isEditable = false,
@@ -307,4 +307,5 @@ export const GraphicEditor: React.FC<GraphicEditorProps> = ({
   );
 };
 
+export { GraphicEditor };
 export default GraphicEditor;
