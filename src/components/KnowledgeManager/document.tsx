@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { GraphicEditor } from './GraphicEditor';
 import { RichTextEditor } from './RichTextEditor';
 
 // Safe date formatting for SSR
@@ -86,7 +85,6 @@ interface ChunkProps {
   onMoveChunkDown?: (chunkId: number) => void;
   onInsertTextChunkAfter?: (chunkOrder: number) => void;
   onCreateChunkDirect?: (chunkData: any, insertAfter?: number) => void;
-  onInsertGraphicChunkAfter?: (chunkOrder: number) => void;
   onInsertImageChunkAfter?: (chunkOrder: number, file: File) => void;
 }
 
@@ -103,7 +101,6 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
   onMoveChunkDown,
   onInsertTextChunkAfter,
   onCreateChunkDirect,
-  onInsertGraphicChunkAfter,
   onInsertImageChunkAfter
 }) => {
   const [showInsertMenu, setShowInsertMenu] = useState(false);
@@ -202,7 +199,6 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
               <option value="list">Liste</option>
               <option value="code">Code</option>
               <option value="table">Tabelle</option>
-              <option value="graphic">Grafik</option>
               <option value="image">Bild</option>
             </select>
             <div className="flex gap-2">
@@ -306,17 +302,58 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
           </h3>
         );
       case 'text':
-        // Helper function to render formatted text with color support
+        // Helper function to render formatted text with color, list, and paragraph support
         const renderFormattedText = (text: string) => {
           if (!text) return '';
-          
-          // Convert markdown-like syntax to HTML
-          let formattedText = text
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\[color:#([a-fA-F0-9]{6})\](.*?)\[\/color\]/g, '<span style="color: #$1;">$2</span>')
-            .replace(/\n/g, '<br />');
-          
-          return <span dangerouslySetInnerHTML={{ __html: formattedText }} />;
+
+          const lines = text.split(/\r?\n/);
+          const htmlParts: string[] = [];
+          let inList = false;
+
+          const formatInline = (s: string) =>
+            s
+              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+              .replace(/\[color:#([a-fA-F0-9]{6})\](.*?)\[\/color\]/g, '<span style="color: #$1;">$2</span>');
+
+          const isBullet = (line: string) => {
+            const t = line.trimStart();
+            return t.startsWith('- ') || t.startsWith('* ') || t.startsWith('• ');
+          };
+
+          for (let i = 0; i < lines.length; i++) {
+            const raw = lines[i];
+
+            if (isBullet(raw)) {
+              if (!inList) {
+                htmlParts.push('<ul class="list-disc pl-6 my-2">');
+                inList = true;
+              }
+              const t = raw.trimStart();
+              const itemText = t.replace(/^[-*•]\s+/, '');
+              htmlParts.push(`<li>${formatInline(itemText)}</li>`);
+              continue;
+            }
+
+            // End any open list before handling normal/blank lines
+            if (inList) {
+              htmlParts.push('</ul>');
+              inList = false;
+            }
+
+            // Blank line => paragraph break
+            if (raw.trim() === '') {
+              htmlParts.push('<br />');
+            } else {
+              // Normal text line, keep as is with inline formatting
+              htmlParts.push(`${formatInline(raw)}<br />`);
+            }
+          }
+
+          if (inList) {
+            htmlParts.push('</ul>');
+          }
+
+          return <span dangerouslySetInnerHTML={{ __html: htmlParts.join('') }} />;
         };
 
         return (
@@ -326,7 +363,7 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
                 documentTheme === 'light' ? 'text-black' : 'text-white'
               }`}>{chunk.title}</h4>
             )}
-            <div className={`text-base leading-relaxed whitespace-pre-wrap break-all overflow-hidden ${
+            <div className={`text-base leading-relaxed whitespace-pre-wrap break-words overflow-hidden ${
               documentTheme === 'light' ? 'text-black' : 'text-zinc-200'
             }`}>
               {renderFormattedText(chunk.content)}
@@ -402,34 +439,6 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
                 </tbody>
               </table>
             </div>
-          </div>
-        );
-      case 'graphic':
-        let shapes = [];
-        try {
-          if (typeof chunk.content === 'string') {
-            const parsed = JSON.parse(chunk.content);
-            shapes = parsed.graphic?.shapes || parsed.shapes || [];
-          } else if (chunk.content?.graphic?.shapes) {
-            shapes = chunk.content.graphic.shapes;
-          }
-        } catch (e) {
-          console.error('Error parsing graphic content:', e);
-        }
-        
-        return (
-          <div className="mb-4">
-            {chunk.title && (
-              <h4 className={`text-lg font-medium mb-2 ${
-                documentTheme === 'light' ? 'text-black' : 'text-white'
-              }`}>{chunk.title}</h4>
-            )}
-            <GraphicEditor
-              theme={documentTheme}
-              shapes={shapes}
-              onChange={() => {}} // Read-only in document view
-              isEditable={false} // View-Modus: keine Palette, keine Anweisungen
-            />
           </div>
         );
       case 'image':
@@ -641,20 +650,6 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    onInsertGraphicChunkAfter && onInsertGraphicChunkAfter(chunk.chunk_order);
-                    setShowInsertMenu(false);
-                  }}
-                  className={`w-full px-3 py-2 text-left rounded transition-colors text-sm flex items-center gap-2 ${
-                    documentTheme === 'light'
-                      ? 'hover:bg-gray-100 text-gray-700'
-                      : 'hover:bg-zinc-700 text-zinc-200'
-                  }`}
-                >
-                  <span className="text-blue-500">📊</span>
-                  Grafik
-                </button>
-                <button
-                  onClick={() => {
                     // Create file input and trigger file selection
                     const fileInput = document.createElement('input');
                     fileInput.type = 'file';
@@ -810,9 +805,7 @@ export const ChunkForm: React.FC<ChunkFormProps> = ({
   const [contentFocused, setContentFocused] = useState(false);
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className={`bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl my-8 max-h-[90vh] overflow-y-auto ${
-        newChunk.content.type === 'graphic' ? 'w-full max-w-6xl' : 'w-full max-w-lg'
-      }`}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl my-8 max-h-[90vh] overflow-y-auto w-full max-w-lg">
         {/* Close button - always visible at the top */}
         <div className="sticky top-0 bg-zinc-900 border-b border-zinc-700 p-4 flex justify-between items-center z-10">
           <h4 className="font-medium text-white text-lg">
@@ -839,46 +832,24 @@ export const ChunkForm: React.FC<ChunkFormProps> = ({
               onChange={(e) => onSetNewChunk({ ...newChunk, title: e.target.value })}
               className="w-full px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white placeholder-zinc-400 text-sm focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
             />
-                          {newChunk.content.type === 'graphic' && (
-                <div className="h-96 border border-zinc-600 rounded-lg p-2 overflow-hidden">
-                  <GraphicEditor
-                    shapes={typeof newChunk.content === 'object' && newChunk.content.graphic?.shapes || []}
-                    theme={documentTheme}
-                    onChange={(shapes: any) => onSetNewChunk({
-                      ...newChunk,
-                      content: {
-                        type: 'graphic',
-                        graphic: { shapes }
-                      }
-                    })}
-                    isEditable={true}
-                    layout="compact" // Kompaktes Layout für Modal
-                  />
-                </div>
-              )}
-              {(!newChunk.content.type || newChunk.content.type !== 'graphic') && (
-                <textarea
-                  placeholder={contentFocused || (typeof newChunk.content === 'string' && newChunk.content) ? "" : "Inhalt eingeben..."}
-                  value={typeof newChunk.content === 'string' ? newChunk.content : ''}
-                  onFocus={() => setContentFocused(true)}
-                  onBlur={() => setContentFocused(false)}
-                  onChange={(e) => onSetNewChunk({ ...newChunk, content: e.target.value })}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white placeholder-zinc-400 text-sm h-32 resize-none focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
-                  required
-                />
-              )}
+                        <textarea
+              placeholder={contentFocused || (typeof newChunk.content === 'string' && newChunk.content) ? "" : "Inhalt eingeben..."}
+              value={typeof newChunk.content === 'string' ? newChunk.content : ''}
+              onFocus={() => setContentFocused(true)}
+              onBlur={() => setContentFocused(false)}
+              onChange={(e) => onSetNewChunk({ ...newChunk, content: e.target.value })}
+              className="w-full px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white placeholder-zinc-400 text-sm h-32 resize-none focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
+              required
+            />
             <div className="flex gap-3">
               <select
                 value={newChunk.chunk_type}
                 onChange={(e) => {
                   const newType = e.target.value as any;
-                  const newContent = newType === 'graphic' 
-                    ? { type: 'graphic', graphic: { shapes: [] } }
-                    : (typeof newChunk.content === 'string' ? newChunk.content : '');
                   onSetNewChunk({ 
                     ...newChunk, 
                     chunk_type: newType,
-                    content: newContent
+                    content: typeof newChunk.content === 'string' ? newChunk.content : ''
                   });
                 }}
                 className="px-4 py-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500"
@@ -890,7 +861,6 @@ export const ChunkForm: React.FC<ChunkFormProps> = ({
                 <option value="list">Liste</option>
                 <option value="code">Code</option>
                 <option value="table">Tabelle</option>
-                <option value="graphic">Grafik</option>
                 <option value="image">Bild</option>
               </select>
               <input

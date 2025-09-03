@@ -40,7 +40,6 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
     updateChunk,
     updateChunkDirect,
     createChunkDirect,
-    createGraphicChunk,
     createImageChunk,
     insertChunkBetween,
     renumberToHundreds,

@@ -126,37 +126,12 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     y: number;
   }>({ show: false, x: 0, y: 0 });
 
-  // Convert plain text to HTML on mount/value change, but preserve cursor position
+  // Sync plain text value into editor, preserving visual newlines via innerText
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
-      // Save cursor position
-      const selection = window.getSelection();
-      let cursorPosition = 0;
-      
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        cursorPosition = range.startOffset;
-      }
-      
-      // Only update if the content is significantly different (not just formatting)
-      const currentText = convertHtmlToText(editorRef.current.innerHTML);
+    if (editorRef.current) {
+      const currentText = editorRef.current.innerText || '';
       if (currentText !== value) {
-        editorRef.current.innerHTML = convertTextToHtml(value);
-        
-        // Restore cursor position
-        if (selection && editorRef.current.firstChild) {
-          try {
-            const newRange = document.createRange();
-            const textNode = editorRef.current.firstChild;
-            const maxOffset = textNode.textContent?.length || 0;
-            newRange.setStart(textNode, Math.min(cursorPosition, maxOffset));
-            newRange.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-          } catch (e) {
-            // Ignore cursor positioning errors
-          }
-        }
+        editorRef.current.innerText = value;
       }
     }
   }, [value]);
@@ -218,63 +193,20 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
             // Continue list with new item
             document.execCommand('insertHTML', false, '<br>- ');
           }
-          
-          // Apply formatting after DOM change
-          setTimeout(() => {
-            handleInputChange();
-          }, 10);
           return;
         }
       }
       
-      // Let browser handle Enter normally for non-list items
-      setTimeout(() => {
-        handleInputChange();
-      }, 10);
+      // For normal text, let browser handle Enter completely naturally
+      // No setTimeout or manual handling needed
     }
   };
 
-  // Simple input handler that applies list formatting
+  // Input handler that reads visual text including paragraph breaks
   const handleInputChange = (e?: React.FormEvent) => {
     if (editorRef.current) {
-      const htmlContent = editorRef.current.innerHTML;
-      
-      // Simple regex to add styling to lines that start with "- "
-      const formattedContent = htmlContent.replace(
-        /(^|<br>)(- .+?)(?=<br>|$)/g,
-        '$1<div style="margin-left: 20px; margin-top: 6px; margin-bottom: 2px;">$2</div>'
-      );
-      
-      // Only update if content actually changed
-      if (formattedContent !== htmlContent) {
-        // Save cursor position
-        const selection = window.getSelection();
-        let cursorOffset = 0;
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0);
-          cursorOffset = range.startOffset;
-        }
-        
-        editorRef.current.innerHTML = formattedContent;
-        
-        // Restore cursor position
-        if (selection && editorRef.current.firstChild) {
-          try {
-            const newRange = document.createRange();
-            const textNode = editorRef.current.firstChild;
-            const maxOffset = textNode.textContent?.length || 0;
-            newRange.setStart(textNode, Math.min(cursorOffset, maxOffset));
-            newRange.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-          } catch (e) {
-            // Ignore cursor positioning errors
-          }
-        }
-      }
-      
-      // Convert to plain text and notify parent
-      const plainText = convertHtmlToText(editorRef.current.innerHTML);
+      // Use innerText to preserve newlines for block elements and <br>
+      const plainText = (editorRef.current as HTMLDivElement).innerText || '';
       if (plainText !== value) {
         onChange(plainText);
       }
@@ -372,6 +304,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         } ${className}`}
         style={{ 
           minHeight,
+          whiteSpace: 'pre-wrap',
           wordWrap: 'break-word',
           overflowWrap: 'anywhere'
         }}
