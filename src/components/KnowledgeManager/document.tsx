@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { GraphicEditor } from './GraphicEditor';
+import { RichTextEditor } from './RichTextEditor';
 
 // Safe date formatting for SSR
 const useSafeDate = (dateString: string) => {
@@ -251,6 +252,15 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
                   ? 'bg-white border-gray-300 text-black placeholder-gray-500'
                   : 'bg-zinc-700 border-zinc-600 text-white placeholder-zinc-400'
               }`}
+            />
+          ) : editType === 'text' ? (
+            <RichTextEditor
+              value={editContent}
+              onChange={(value) => setEditContent(value)}
+              placeholder="Inhalt eingeben..."
+              theme={documentTheme}
+              rows={8}
+              className={editType === 'code' ? 'font-mono' : ''}
             />
           ) : (
             <textarea
@@ -734,6 +744,14 @@ export const ChunkRenderer: React.FC<ChunkProps> = ({
                     ? 'bg-white border-gray-300 text-black placeholder-gray-500'
                     : 'bg-zinc-800 border-zinc-600 text-white placeholder-zinc-400'
                 }`}
+              />
+            ) : newChunkType === 'text' ? (
+              <RichTextEditor
+                value={newChunkContent}
+                onChange={(value) => setNewChunkContent(value)}
+                placeholder="Inhalt eingeben..."
+                theme={documentTheme}
+                rows={6}
               />
             ) : (
               <textarea
