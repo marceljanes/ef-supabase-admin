@@ -152,7 +152,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
     
-    let text = tempDiv.innerHTML
+    const text = tempDiv.innerHTML
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
       .replace(/<b>(.*?)<\/b>/gi, '**$1**')
