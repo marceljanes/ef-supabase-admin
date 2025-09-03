@@ -126,10 +126,38 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     y: number;
   }>({ show: false, x: 0, y: 0 });
 
-  // Convert plain text to HTML on mount/value change
+  // Convert plain text to HTML on mount/value change, but preserve cursor position
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = convertTextToHtml(value);
+      // Save cursor position
+      const selection = window.getSelection();
+      let cursorPosition = 0;
+      
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        cursorPosition = range.startOffset;
+      }
+      
+      // Only update if the content is significantly different (not just formatting)
+      const currentText = convertHtmlToText(editorRef.current.innerHTML);
+      if (currentText !== value) {
+        editorRef.current.innerHTML = convertTextToHtml(value);
+        
+        // Restore cursor position
+        if (selection && editorRef.current.firstChild) {
+          try {
+            const newRange = document.createRange();
+            const textNode = editorRef.current.firstChild;
+            const maxOffset = textNode.textContent?.length || 0;
+            newRange.setStart(textNode, Math.min(cursorPosition, maxOffset));
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+          } catch (e) {
+            // Ignore cursor positioning errors
+          }
+        }
+      }
     }
   }, [value]);
 
@@ -164,11 +192,26 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     return text;
   };
 
-  const handleInput = () => {
+  const handleInput = (e?: React.FormEvent) => {
     if (editorRef.current) {
       const htmlContent = editorRef.current.innerHTML;
       const plainText = convertHtmlToText(htmlContent);
-      onChange(plainText);
+      
+      // Only trigger onChange if content actually changed
+      if (plainText !== value) {
+        onChange(plainText);
+      }
+    }
+  };
+
+  // Handle Enter key specifically to ensure proper line breaks
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      // Let the browser handle Enter naturally for better cursor positioning
+      // The input event will be triggered after the DOM change
+      setTimeout(() => {
+        handleInput();
+      }, 0);
     }
   };
 
@@ -253,7 +296,9 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         ref={editorRef}
         contentEditable
         onInput={handleInput}
+        onKeyDown={handleKeyDown}
         onContextMenu={handleContextMenu}
+        suppressContentEditableWarning={true}
         className={`w-full px-3 py-2 rounded-lg border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 ${
           theme === 'light'
             ? 'bg-white border-gray-300 text-black placeholder-gray-500'
