@@ -196,29 +196,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (!mounted) return;
 
-    // Force loading to false after 30 seconds max
-    const maxLoadingTimeout = setTimeout(() => {
-      setLoading(false);
-    }, 30000);
+    let isInitialized = false;
 
-    checkAuth().finally(() => {
-      clearTimeout(maxLoadingTimeout);
-    });
-    
-    // Session heartbeat - check auth every 5 minutes to keep session alive
-    const heartbeatInterval = setInterval(() => {
-      if (user && typeof window !== 'undefined') {
-        const lastSuccess = localStorage.getItem('ef-auth-last-success');
-        if (lastSuccess) {
-          const timeSinceSuccess = Date.now() - parseInt(lastSuccess);
-          // Only do heartbeat check if it's been more than 3 minutes since last success
-          if (timeSinceSuccess > 3 * 60 * 1000) {
-            console.log('Performing session heartbeat...');
-            checkAuth(0, 2, true); // Heartbeat with 2 retries
-          }
-        }
+    // Force loading to false after 15 seconds max
+    const maxLoadingTimeout = setTimeout(() => {
+      console.log('Force setting loading to false after timeout');
+      setLoading(false);
+    }, 15000);
+
+    // Initial auth check
+    const initializeAuth = async () => {
+      if (isInitialized) return;
+      isInitialized = true;
+      
+      try {
+        await checkAuth();
+      } finally {
+        clearTimeout(maxLoadingTimeout);
       }
-    }, 5 * 60 * 1000); // Every 5 minutes
+    };
+
+    initializeAuth();
     
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -243,6 +241,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             if (typeof window !== 'undefined') {
               localStorage.removeItem('ef-auth-last-success');
               sessionStorage.removeItem('ef-auth-backup');
+              localStorage.removeItem('ef-auth-cache');
             }
           } else if (event === 'TOKEN_REFRESHED' && session?.user) {
             console.log('Token refreshed successfully');
@@ -252,18 +251,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
           }
         } catch (error) {
           console.error('Error handling auth state change:', error);
-          // Don't set loading false on auth state change errors
         }
+        
+        // Only set loading false if we're still in loading state
         setLoading(false);
       }
     );
 
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(maxLoadingTimeout);
+      isInitialized = true; // Prevent any further initialization
+    };
+  }, [mounted]); // Removed 'user' from dependencies to prevent infinite loop
+
+  // Separate useEffect for heartbeat that doesn't cause re-renders
+  useEffect(() => {
+    if (!mounted || !user) return;
+    
+    // Session heartbeat - check auth every 5 minutes to keep session alive
+    const heartbeatInterval = setInterval(() => {
+      if (typeof window !== 'undefined') {
+        const lastSuccess = localStorage.getItem('ef-auth-last-success');
+        if (lastSuccess) {
+          const timeSinceSuccess = Date.now() - parseInt(lastSuccess);
+          // Only do heartbeat check if it's been more than 3 minutes since last success
+          if (timeSinceSuccess > 3 * 60 * 1000) {
+            console.log('Performing session heartbeat...');
+            checkAuth(0, 2, true); // Heartbeat with 2 retries
+          }
+        }
+      }
+    }, 5 * 60 * 1000); // Every 5 minutes
+    
     // Listen for network status changes
     const handleOnline = () => {
       console.log('Network online - checking auth status');
-      if (user) {
-        checkAuth(0, 1); // Quick auth check when coming back online
-      }
+      checkAuth(0, 1); // Quick auth check when coming back online
     };
     
     const handleOffline = () => {
@@ -276,8 +300,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     return () => {
-      subscription.unsubscribe();
-      clearTimeout(maxLoadingTimeout);
       clearInterval(heartbeatInterval);
       
       if (typeof window !== 'undefined') {
@@ -285,7 +307,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         window.removeEventListener('offline', handleOffline);
       }
     };
-  }, [mounted, user]);
+  }, [mounted, user?.id]); // Use user.id instead of user object to prevent unnecessary re-renders
 
   const value = {
     user,
