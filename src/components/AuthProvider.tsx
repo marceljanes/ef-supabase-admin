@@ -38,35 +38,75 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setMounted(true);
   }, []);
 
-  const checkAuth = async (retryCount = 0, maxRetries = 3) => {
+  const checkAuth = async (retryCount = 0, maxRetries = 5, isHeartbeat = false) => {
     if (!mounted) return;
     
     try {
-      // Increased timeout to 60 seconds for maximum online stability
+      // More aggressive timeout strategy - shorter for initial checks, longer for heartbeat
+      const timeoutDuration = isHeartbeat ? 30000 : (15000 + (retryCount * 5000));
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Auth check timeout')), 60000)
+        setTimeout(() => reject(new Error('Auth check timeout')), timeoutDuration)
       );
       
       const authPromise = (async () => {
-        const authUser = await dbService.getCurrentUser();
+        // Try to get session from local storage first for speed
+        let authUser;
+        let fromCache = false;
         
-        if (authUser) {
-          const profile = await dbService.getCurrentUserProfile();
-          setUser(authUser);
-          setUserProfile(profile);
+        if (typeof window !== 'undefined' && retryCount === 0) {
+          const cachedSession = localStorage.getItem('ef-auth-cache');
+          const lastSuccess = localStorage.getItem('ef-auth-last-success');
           
-          // Store successful auth timestamp for heartbeat
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('ef-auth-last-success', Date.now().toString());
-            sessionStorage.setItem('ef-auth-backup', JSON.stringify({ 
-              userId: authUser.id, 
-              email: authUser.email,
-              timestamp: Date.now() 
-            }));
+          if (cachedSession && lastSuccess) {
+            const timeSinceSuccess = Date.now() - parseInt(lastSuccess);
+            // Use cached session if less than 2 minutes old
+            if (timeSinceSuccess < 2 * 60 * 1000) {
+              try {
+                const parsed = JSON.parse(cachedSession);
+                if (parsed.user && parsed.profile) {
+                  console.log('Using cached auth session');
+                  setUser(parsed.user);
+                  setUserProfile(parsed.profile);
+                  fromCache = true;
+                  return;
+                }
+              } catch (e) {
+                console.warn('Failed to parse cached session');
+              }
+            }
           }
-        } else {
-          setUser(null);
-          setUserProfile(null);
+        }
+        
+        if (!fromCache) {
+          authUser = await dbService.getCurrentUser();
+          
+          if (authUser) {
+            const profile = await dbService.getCurrentUserProfile();
+            setUser(authUser);
+            setUserProfile(profile);
+            
+            // Cache successful auth
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('ef-auth-last-success', Date.now().toString());
+              localStorage.setItem('ef-auth-cache', JSON.stringify({ 
+                user: authUser, 
+                profile: profile,
+                timestamp: Date.now() 
+              }));
+              sessionStorage.setItem('ef-auth-backup', JSON.stringify({ 
+                userId: authUser.id, 
+                email: authUser.email,
+                timestamp: Date.now() 
+              }));
+            }
+          } else {
+            setUser(null);
+            setUserProfile(null);
+            // Clear cache on logout
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('ef-auth-cache');
+            }
+          }
         }
       })();
       
@@ -77,37 +117,65 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       const errorMessage = error instanceof Error ? error.message : String(error);
       
-      // Retry on timeout or network errors
-      if ((errorMessage.includes('timeout') || errorMessage.includes('network') || errorMessage.includes('fetch')) && retryCount < maxRetries) {
-        console.warn(`Retrying auth check in ${(retryCount + 1) * 2} seconds...`);
+      // Enhanced retry logic with exponential backoff
+      if ((errorMessage.includes('timeout') || errorMessage.includes('network') || errorMessage.includes('fetch') || errorMessage.includes('Failed to fetch')) && retryCount < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Exponential backoff, max 30s
+        console.warn(`Retrying auth check in ${delay / 1000} seconds... (${retryCount + 1}/${maxRetries})`);
+        
         setTimeout(() => {
-          checkAuth(retryCount + 1, maxRetries);
-        }, (retryCount + 1) * 2000);
+          checkAuth(retryCount + 1, maxRetries, isHeartbeat);
+        }, delay);
         return;
       }
       
-      // Check if we have a backup session
+      // Enhanced fallback mechanisms
       if (typeof window !== 'undefined') {
         const lastSuccess = localStorage.getItem('ef-auth-last-success');
+        const cachedSession = localStorage.getItem('ef-auth-cache');
         const backupSession = sessionStorage.getItem('ef-auth-backup');
         
-        if (lastSuccess && backupSession) {
+        if (lastSuccess && (cachedSession || backupSession)) {
           const timeSinceSuccess = Date.now() - parseInt(lastSuccess);
-          // Keep session alive if last success was within 10 minutes
-          if (timeSinceSuccess < 10 * 60 * 1000) {
-            console.warn('Auth check failed but keeping session based on recent success');
-            return;
+          // Extended session preservation for network issues - 15 minutes
+          if (timeSinceSuccess < 15 * 60 * 1000) {
+            console.warn('Auth check failed but preserving session based on recent success');
+            
+            // Try to restore from cache
+            if (cachedSession) {
+              try {
+                const parsed = JSON.parse(cachedSession);
+                if (parsed.user && parsed.profile) {
+                  console.log('Restoring from cached session during network issues');
+                  setUser(parsed.user);
+                  setUserProfile(parsed.profile);
+                  return;
+                }
+              } catch (e) {
+                console.warn('Failed to restore cached session');
+              }
+            }
+            
+            return; // Keep current session without logout
           }
         }
       }
       
-      // Only logout if we're sure the session is invalid
-      if (!errorMessage.includes('timeout') && !errorMessage.includes('network')) {
+      // Only logout if we're sure the session is invalid (not network issues)
+      if (!errorMessage.includes('timeout') && !errorMessage.includes('network') && !errorMessage.includes('fetch')) {
+        console.log('Logging out due to invalid session');
         setUser(null);
         setUserProfile(null);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('ef-auth-cache');
+          localStorage.removeItem('ef-auth-last-success');
+        }
+      } else {
+        console.warn('Network error detected, preserving current session');
       }
     } finally {
-      setLoading(false);
+      if (retryCount === 0) { // Only set loading false on initial attempt
+        setLoading(false);
+      }
     }
   };
 
@@ -143,10 +211,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const lastSuccess = localStorage.getItem('ef-auth-last-success');
         if (lastSuccess) {
           const timeSinceSuccess = Date.now() - parseInt(lastSuccess);
-          // Only do heartbeat check if it's been more than 4 minutes since last success
-          if (timeSinceSuccess > 4 * 60 * 1000) {
+          // Only do heartbeat check if it's been more than 3 minutes since last success
+          if (timeSinceSuccess > 3 * 60 * 1000) {
             console.log('Performing session heartbeat...');
-            checkAuth(0, 1); // Single retry for heartbeat
+            checkAuth(0, 2, true); // Heartbeat with 2 retries
           }
         }
       }
