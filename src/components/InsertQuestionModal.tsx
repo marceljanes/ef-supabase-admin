@@ -10,9 +10,6 @@ export default function InsertQuestionModal({ onClose }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [vendorFilter, setVendorFilter] = useState('');
-  const [examSearch, setExamSearch] = useState('');
-  const [vendors, setVendors] = useState<string[]>([]);
   const [exams, setExams] = useState<ExamOption[]>([]);
   const [selectedExam, setSelectedExam] = useState<ExamOption | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
@@ -28,21 +25,12 @@ export default function InsertQuestionModal({ onClose }: Props) {
   ]);
   const addAnswer = () => { setAnswers(a => [...a, { text: '', isCorrect: false }]); };
   const removeAnswer = (idx:number) => { setAnswers(a => a.filter((_,i)=> i!==idx)); };
-  const [globalCategoryFilter, setGlobalCategoryFilter] = useState('');
-  const [allCategories, setAllCategories] = useState<string[]>([]);
-  const [categoriesCache, setCategoriesCache] = useState<{[code:string]: string[]}>({});
 
   // Load exams that have categories (active or inactive)
   const loadExamsWithCategories = async () => {
     try {
       setLoading(true);
       const list = await dbService.getExamsWithCategories();
-      const vends = await dbService.getVendors();
-      const pairs = await dbService.getExamCodeCategoryMap();
-      const catSet = new Set<string>();
-      pairs.forEach((p:any)=>{ if(p.category_name) catSet.add(p.category_name); });
-      setAllCategories(Array.from(catSet).sort());
-      setVendors(vends);
       setExams(list as ExamOption[]);
     } catch (e:any) {
       setError(e.message || 'Load failed');
@@ -70,31 +58,6 @@ export default function InsertQuestionModal({ onClose }: Props) {
     loadCats();
   }, [selectedExam]);
 
-  useEffect(()=>{
-    // build categories cache once from all exam codes when list changes
-    (async () => {
-      const mapPairs = await dbService.getExamCodeCategoryMap();
-      const bucket: {[k:string]: string[]} = {};
-      mapPairs.forEach((p:any)=>{
-        bucket[p.exam_code] = bucket[p.exam_code] || [];
-        if (p.category_name) bucket[p.exam_code].push(p.category_name);
-      });
-      Object.keys(bucket).forEach(k=> bucket[k] = [...new Set(bucket[k])].sort());
-      setCategoriesCache(bucket);
-    })();
-  }, [exams.length]);
-
-  const filteredExams = exams.filter(ex => {
-    // Only show active exams
-    if (!ex.is_active) return false;
-    if (vendorFilter && ex.vendor !== vendorFilter) return false;
-    if (examSearch && !(`${ex.exam_code} ${ex.exam_name}`.toLowerCase().includes(examSearch.toLowerCase()))) return false;
-    if (globalCategoryFilter) {
-      // require that this exam has that category
-      if (!categoriesCache[ex.exam_code]?.includes(globalCategoryFilter)) return false;
-    }
-    return true;
-  });
 
   const updateAnswerText = (idx:number, text:string) => {
     setAnswers(a => a.map((ans,i)=> i===idx ? { ...ans, text } : ans));
@@ -148,33 +111,23 @@ export default function InsertQuestionModal({ onClose }: Props) {
                 <h3 className="text-sm font-medium text-white">1. Choose Exam</h3>
                 <div className="flex flex-col md:flex-row gap-4">
                   <div className="flex-1 space-y-2">
-                    <label className="block text-xs uppercase text-zinc-400">Vendor</label>
-                    <select value={vendorFilter} onChange={e=>setVendorFilter(e.target.value)} className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-2 text-sm">
-                      <option value="">All Vendors</option>
-                      {vendors.map(v => <option key={v} value={v}>{v}</option>)}
+                    <label className="block text-xs uppercase text-zinc-400">Active Exams</label>
+                    <select 
+                      value={selectedExam?.exam_code || ''} 
+                      onChange={e => {
+                        const exam = exams.find(ex => ex.exam_code === e.target.value);
+                        setSelectedExam(exam || null);
+                      }} 
+                      className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-2 text-sm"
+                    >
+                      <option value="">-- Select Active Exam --</option>
+                      {exams.filter(ex => ex.is_active).map(ex => (
+                        <option key={ex.exam_code} value={ex.exam_code}>
+                          {ex.exam_code} - {ex.exam_name}
+                        </option>
+                      ))}
                     </select>
                   </div>
-                  <div className="flex-1 space-y-2">
-                    <label className="block text-xs uppercase text-zinc-400">Category Filter</label>
-                    <select value={globalCategoryFilter} onChange={e=>setGlobalCategoryFilter(e.target.value)} className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-2 text-sm">
-                      <option value="">All Categories</option>
-                      {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <label className="block text-xs uppercase text-zinc-400">Search</label>
-                    <input value={examSearch} onChange={e=>setExamSearch(e.target.value)} placeholder="Search code or name" className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-2 text-sm" />
-                  </div>
-                </div>
-                <div className="max-h-48 overflow-y-auto border border-zinc-700 rounded divide-y divide-zinc-700">
-                  {filteredExams.map(ex => (
-                    <button key={ex.exam_code} onClick={()=>setSelectedExam(ex)} className={`w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 flex items-center justify-between ${selectedExam?.exam_code===ex.exam_code ? 'bg-zinc-800' : ''}`}>
-                      <span className="font-medium text-zinc-200">{ex.exam_code}</span>
-                      <span className="text-zinc-400 ml-2 flex-1 truncate">{ex.exam_name}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded ${ex.is_active ? 'bg-green-900 text-green-300' : 'bg-zinc-700 text-zinc-300'}`}>{ex.is_active ? 'Active':'Inactive'}</span>
-                    </button>
-                  ))}
-                  {filteredExams.length === 0 && <div className="px-3 py-4 text-xs text-zinc-500">No exams with categories match filters.</div>}
                 </div>
               </div>
 
