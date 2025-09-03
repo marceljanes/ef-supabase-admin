@@ -341,22 +341,6 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
                             </button>
                             <button
                               onClick={() => {
-                                if (state.selectedDocument) {
-                                  createGraphicChunk(state.selectedDocument.id!);
-                                  setState(prev => ({ ...prev, showEmptyDocumentMenu: false }));
-                                }
-                              }}
-                              className={`w-full px-4 py-3 text-left rounded transition-colors text-sm flex items-center gap-3 ${
-                                state.documentTheme === 'light'
-                                  ? 'hover:bg-gray-100 text-gray-700'
-                                  : 'hover:bg-zinc-700 text-zinc-200'
-                              }`}
-                            >
-                              <span className="text-blue-500">📊</span>
-                              Grafik-Chunk
-                            </button>
-                            <button
-                              onClick={() => {
                                 // Create file input and trigger file selection
                                 const fileInput = document.createElement('input');
                                 fileInput.type = 'file';
@@ -426,12 +410,6 @@ export default function KnowledgeManager({ className = '' }: KnowledgeManagerPro
                             // Direct creation for inline chunk creation
                             if (state.selectedDocument) {
                               createChunkDirect(state.selectedDocument.id!, chunkData, insertAfter);
-                            }
-                          }}
-                          onInsertGraphicChunkAfter={(chunkOrder) => {
-                            // Directly create graphic chunk between
-                            if (state.selectedDocument) {
-                              insertChunkBetween(state.selectedDocument.id!, chunkOrder, 'graphic');
                             }
                           }}
                           onInsertImageChunkAfter={(chunkOrder, file) => {
