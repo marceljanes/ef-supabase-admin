@@ -34,8 +34,14 @@ export interface Question {
   inactive: boolean;
   updated_at?: string; // added
   created_at?: string; // added for recent activity
+  created_by?: string | null; // UUID reference to auth.users(id)
   embedding?: number[] | null; // vector embedding (pgvector)
   searchable_text?: string | null; // denormalized hybrid search text
+  // creator info will be dynamically joined from user_profiles
+  creator?: {
+    full_name?: string;
+    email?: string;
+  };
 }
 
 export interface Answer {

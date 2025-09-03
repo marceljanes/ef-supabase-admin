@@ -28,6 +28,33 @@ const isRecent = (updated_at?: string, created_at?: string) => {
   return (now - updatedTime) < RECENT_MS && updatedTime > createdTime;
 };
 
+// Color palette for user badges
+const userColors = [
+  'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+  'bg-green-500/10 text-green-400 border border-green-500/20',
+  'bg-purple-500/10 text-purple-400 border border-purple-500/20',
+  'bg-orange-500/10 text-orange-400 border border-orange-500/20',
+  'bg-pink-500/10 text-pink-400 border border-pink-500/20',
+  'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20',
+  'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20',
+  'bg-red-500/10 text-red-400 border border-red-500/20',
+  'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20',
+  'bg-teal-500/10 text-teal-400 border border-teal-500/20'
+];
+
+const getUserColor = (name: string): string => {
+  if (!name || name === 'Unknown') {
+    return 'bg-zinc-600/20 text-zinc-500 border border-zinc-600/30';
+  }
+  // Simple hash function to get consistent color for same user
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash + name.charCodeAt(i)) & 0xffffffff;
+  }
+  const index = Math.abs(hash) % userColors.length;
+  return userColors[index];
+};
+
 export default function QuestionsList({
   questions,
   filteredQuestions,
@@ -87,6 +114,9 @@ export default function QuestionsList({
                 Category
               </th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                Created By
+              </th>
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">
                 Question
               </th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">
@@ -103,13 +133,13 @@ export default function QuestionsList({
           <tbody className="divide-y divide-zinc-700">
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-6 py-12 text-center text-zinc-400">
+                <td colSpan={9} className="px-6 py-12 text-center text-zinc-400">
                   Loading questions...
                 </td>
               </tr>
             ) : currentQuestions.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-12 text-center text-zinc-400">
+                <td colSpan={9} className="px-6 py-12 text-center text-zinc-400">
                   No questions match your filters.
                 </td>
               </tr>
@@ -138,6 +168,13 @@ export default function QuestionsList({
                     ) : (
                       <span className="text-zinc-300">{question.category || 'N/A'}</span>
                     )}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm">
+                    <span className={`inline-flex items-center px-2 py-1 text-xs rounded-full ${
+                      getUserColor(question.creator?.full_name || 'Unknown')
+                    }`}>
+                      {question.creator?.full_name || 'Unknown'}
+                    </span>
                   </td>
                   <td className="px-4 py-4 text-sm text-zinc-300 max-w-sm truncate">
                     <span className="inline-flex items-center gap-2">

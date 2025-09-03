@@ -51,7 +51,10 @@ export default function AdminDashboard() {
   const [searchText, setSearchText] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [selectedCreator, setSelectedCreator] = useState<string>('');
+  const [availableCreators, setAvailableCreators] = useState<string[]>([]);
   const [showRecentlyUpdated, setShowRecentlyUpdated] = useState<boolean>(false);
+  const [showCreatedToday, setShowCreatedToday] = useState<boolean>(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [saving, setSaving] = useState(false);
   const [examCategories, setExamCategories] = useState<string[]>([]);
@@ -77,6 +80,13 @@ export default function AdminDashboard() {
     filteredQuestions = filteredQuestions.filter(q => q.category === selectedCategory);
   }
   
+  // Apply creator filter if a specific creator is selected
+  if (selectedCreator !== '') {
+    filteredQuestions = filteredQuestions.filter(q => 
+      q.creator?.full_name === selectedCreator
+    );
+  }
+  
   // Apply recently updated filter (last 6 months)
   if (showRecentlyUpdated) {
     const sixMonthsAgo = new Date();
@@ -98,6 +108,21 @@ export default function AdminDashboard() {
       if (diff >= 0 && diff < FIVE_MIN) return false;
       
       return true;
+    });
+  }
+  
+  // Apply created today filter
+  if (showCreatedToday) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to start of today
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1); // Set to start of tomorrow
+    
+    filteredQuestions = filteredQuestions.filter(q => {
+      if (!q.created_at || isNaN(Date.parse(q.created_at))) return false;
+      
+      const createdDate = new Date(q.created_at);
+      return createdDate >= today && createdDate < tomorrow;
     });
   }
   
@@ -193,6 +218,15 @@ export default function AdminDashboard() {
       console.log('Available categories for', examCode, ':', categories);
       setAvailableCategories(categories);
       setSelectedCategory(''); // Reset category filter
+
+      // Extract unique creators from loaded questions
+      const creators = [...new Set(questions
+        .map((q: any) => q.creator?.full_name)
+        .filter((creator: any) => creator && creator.trim() !== '')
+      )].sort() as string[];
+      console.log('Available creators for', examCode, ':', creators);
+      setAvailableCreators(creators);
+      setSelectedCreator(''); // Reset creator filter
 
       // Load valid categories from exam_categories table for validation
       await loadExamCategories(examCode);
@@ -601,7 +635,9 @@ export default function AdminDashboard() {
                         setCurrentPage(1);
                         setSearchText('');
                         setSelectedCategory('');
+                        setSelectedCreator('');
                         setShowRecentlyUpdated(false);
+                        setShowCreatedToday(false);
                         loadQuestionsForExamCode(examCode);
                       }}
                       className={`px-3 py-2 text-sm rounded-md transition-colors ${
@@ -647,7 +683,103 @@ export default function AdminDashboard() {
                       </span>
                     )}
                   </button>
+                  <button
+                    onClick={() => {
+                      setShowCreatedToday(!showCreatedToday);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-3 py-2 text-sm rounded-md transition-colors flex items-center space-x-2 ${
+                      showCreatedToday
+                        ? 'bg-green-600 text-white'
+                        : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                    }`}
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Created Today</span>
+                    {showCreatedToday && (
+                      <span className="text-xs bg-green-500/20 px-1.5 py-0.5 rounded">
+                        {filteredQuestions.length}
+                      </span>
+                    )}
+                  </button>
                 </div>
+
+                {/* Creator Filter */}
+                {availableCreators.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Users className="h-4 w-4 text-zinc-400" />
+                      <span className="text-sm text-zinc-400">Filter by Creator:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {availableCreators.map((creator) => {
+                        const creatorCount = filteredQuestions.filter(q => 
+                          q.creator?.full_name === creator
+                        ).length;
+                        
+                        // Get the same color as in the badges for consistency
+                        const getUserColorClass = (name: string) => {
+                          if (!name || name === 'Unknown') return 'border-zinc-600 text-zinc-300';
+                          const userColors = [
+                            'border-blue-500 text-blue-400',
+                            'border-green-500 text-green-400', 
+                            'border-purple-500 text-purple-400',
+                            'border-orange-500 text-orange-400',
+                            'border-pink-500 text-pink-400',
+                            'border-cyan-500 text-cyan-400',
+                            'border-yellow-500 text-yellow-400',
+                            'border-red-500 text-red-400',
+                            'border-indigo-500 text-indigo-400',
+                            'border-teal-500 text-teal-400'
+                          ];
+                          let hash = 0;
+                          for (let i = 0; i < name.length; i++) {
+                            hash = ((hash << 5) - hash + name.charCodeAt(i)) & 0xffffffff;
+                          }
+                          const index = Math.abs(hash) % userColors.length;
+                          return userColors[index];
+                        };
+                        
+                        const colorClass = getUserColorClass(creator);
+                        
+                        return (
+                          <button
+                            key={creator}
+                            onClick={() => {
+                              setSelectedCreator(selectedCreator === creator ? '' : creator);
+                              setCurrentPage(1);
+                            }}
+                            className={`px-3 py-2 text-sm rounded-md transition-colors flex items-center space-x-2 border-2 ${
+                              selectedCreator === creator
+                                ? `${colorClass} bg-current/10`
+                                : `${colorClass} bg-zinc-700/50 hover:bg-zinc-600/50`
+                            }`}
+                          >
+                            <Users className="h-3 w-3" />
+                            <span>{creator}</span>
+                            {selectedCreator === creator && (
+                              <span className="text-xs bg-current/20 px-1.5 py-0.5 rounded">
+                                {creatorCount}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                      {selectedCreator && (
+                        <button
+                          onClick={() => {
+                            setSelectedCreator('');
+                            setCurrentPage(1);
+                          }}
+                          className="px-2 py-2 text-sm rounded-md transition-colors bg-zinc-600 hover:bg-zinc-500 text-zinc-300"
+                          title="Clear creator filter"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

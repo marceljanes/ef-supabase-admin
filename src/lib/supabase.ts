@@ -9,7 +9,7 @@ export interface UpdateQuestionPayload { id: number | string; question: string; 
 type ExamPageNullableUpdate = { [K in keyof BaseExamPage]?: BaseExamPage[K] | null };
 export type ExamPageUpdate = { id: number } & ExamPageNullableUpdate;
 export type NewExamCategory = Partial<{ [K in keyof BaseExamCategory]: BaseExamCategory[K] | null }> & { exam_code: string; category_name: string };
-export type InsertQuestionPayload = Partial<QuestionLike> & { question: string; answers: Answer[]; explanation: string; level: string; exam_code: string; category?: string | null };
+export type InsertQuestionPayload = Partial<QuestionLike> & { question: string; answers: Answer[]; explanation: string; level: string; exam_code: string; category?: string | null; created_by?: string | null };
 export type CreateExamPageInput = Partial<BaseExamPage> & { exam_code: string; exam_name: string };
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://wzhkbmevwfiwndrrwbjl.supabase.co';
@@ -274,17 +274,67 @@ export const dbService = {
     try {
       console.log('Fetching all questions...');
       
-      const { data, error } = await supabase
+      // Get questions first
+      const { data: questions, error: questionsError } = await supabase
         .from('questions')
         .select('*')
         .order('id', { ascending: true });
 
-      if (error) {
-        throw new Error(`Error fetching all questions: ${error.message}`);
+      if (questionsError) {
+        throw new Error(`Error fetching questions: ${questionsError.message}`);
       }
 
-      console.log(`Fetched ${data?.length || 0} total questions`);
-      return data || [];
+      if (!questions || questions.length === 0) {
+        return [];
+      }
+
+      // Get unique created_by IDs
+      const creatorIds = [...new Set(questions.map(q => q.created_by).filter(Boolean))];
+      console.log('Found creator IDs:', creatorIds);
+
+      // Get user profiles for these IDs
+      let userProfiles: { [key: string]: { full_name?: string; email?: string } } = {};
+      
+      if (creatorIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('user_profiles')
+          .select('id, full_name, email')
+          .in('id', creatorIds);
+
+        if (profilesError) {
+          console.error('Error fetching user profiles:', profilesError);
+        } else {
+          // Create lookup object
+          (profiles || []).forEach(profile => {
+            userProfiles[profile.id] = {
+              full_name: profile.full_name,
+              email: profile.email
+            };
+          });
+          console.log('User profiles lookup:', userProfiles);
+        }
+      }
+
+      // Combine questions with creator info
+      const questionsWithCreators = questions.map(question => ({
+        ...question,
+        creator: question.created_by ? userProfiles[question.created_by] || null : null
+      }));
+
+      console.log(`Fetched ${questionsWithCreators.length} questions with creator info`);
+      
+      // Debug sample
+      if (questionsWithCreators.length > 0) {
+        const sample = questionsWithCreators[0];
+        console.log('Sample question with creator:', {
+          id: sample.id,
+          created_by: sample.created_by,
+          creator: sample.creator,
+          creator_full_name: sample.creator?.full_name
+        });
+      }
+
+      return questionsWithCreators;
     } catch (error) {
       console.error('getAllQuestions error:', error);
       throw error;
@@ -320,19 +370,57 @@ export const dbService = {
     try {
       console.log(`Fetching questions for exam code: ${examCode}`);
       
-      const { data, error } = await supabase
+      // Get questions first
+      const { data: questions, error: questionsError } = await supabase
         .from('questions')
         .select('*')
         .eq('exam_code', examCode)
         .order('id', { ascending: true });
 
-      if (error) {
-        throw new Error(`Error fetching questions for exam code ${examCode}: ${error.message}`);
+      if (questionsError) {
+        throw new Error(`Error fetching questions for exam code ${examCode}: ${questionsError.message}`);
       }
 
-      console.log(`Fetched ${data?.length || 0} questions for exam code: ${examCode}`);
+      if (!questions || questions.length === 0) {
+        return [];
+      }
+
+      // Get unique created_by IDs
+      const creatorIds = [...new Set(questions.map(q => q.created_by).filter(Boolean))];
+      console.log('Found creator IDs for exam code:', examCode, creatorIds);
+
+      // Get user profiles for these IDs
+      let userProfiles: { [key: string]: { full_name?: string; email?: string } } = {};
       
-      return data || [];
+      if (creatorIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('user_profiles')
+          .select('id, full_name, email')
+          .in('id', creatorIds);
+
+        if (profilesError) {
+          console.error('Error fetching user profiles for exam code:', examCode, profilesError);
+        } else {
+          // Create lookup object
+          (profiles || []).forEach(profile => {
+            userProfiles[profile.id] = {
+              full_name: profile.full_name,
+              email: profile.email
+            };
+          });
+          console.log('User profiles lookup for exam code:', examCode, userProfiles);
+        }
+      }
+
+      // Combine questions with creator info
+      const questionsWithCreators = questions.map(question => ({
+        ...question,
+        creator: question.created_by ? userProfiles[question.created_by] || null : null
+      }));
+
+      console.log(`Fetched ${questionsWithCreators.length} questions with creator info for exam code: ${examCode}`);
+      
+      return questionsWithCreators;
     } catch (error) {
       console.error('getQuestionsByExamCode error:', error);
       throw error;
@@ -556,11 +644,20 @@ export const dbService = {
   },
   async insertQuestion(question: InsertQuestionPayload) {
     try {
+      // Get current user to set created_by field
+      const currentUser = await this.getCurrentUser();
+      
       // Ensure created_at is always set on creation (single or bulk loop usage)
       const payload = { ...question };
       if (!('created_at' in payload) || !payload.created_at) {
         payload.created_at = new Date().toISOString();
       }
+      
+      // Set created_by field if not already provided and user is authenticated
+      if (currentUser && !payload.created_by) {
+        payload.created_by = currentUser.id;
+      }
+      
       const { data, error } = await supabase
         .from('questions')
         .insert(payload)
