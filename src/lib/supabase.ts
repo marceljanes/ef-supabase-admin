@@ -293,7 +293,7 @@ export const dbService = {
       console.log('Found creator IDs:', creatorIds);
 
       // Get user profiles for these IDs
-      let userProfiles: { [key: string]: { full_name?: string; email?: string } } = {};
+      const userProfiles: { [key: string]: { full_name?: string; email?: string } } = {};
       
       if (creatorIds.length > 0) {
         const { data: profiles, error: profilesError } = await supabase
@@ -390,7 +390,7 @@ export const dbService = {
       console.log('Found creator IDs for exam code:', examCode, creatorIds);
 
       // Get user profiles for these IDs
-      let userProfiles: { [key: string]: { full_name?: string; email?: string } } = {};
+      const userProfiles: { [key: string]: { full_name?: string; email?: string } } = {};
       
       if (creatorIds.length > 0) {
         const { data: profiles, error: profilesError } = await supabase
