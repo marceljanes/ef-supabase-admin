@@ -12,7 +12,7 @@ interface RichTextEditorProps {
 interface ContextMenuProps {
   x: number;
   y: number;
-  onFormat: (type: 'bold' | 'color' | 'bulletList') => void;
+  onFormat: (type: 'bold' | 'color' | 'bulletList', colorValue?: string) => void;
   onClose: () => void;
   theme: 'dark' | 'light';
 }
@@ -36,10 +36,15 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, onFormat, onClose, them
           : 'bg-zinc-800 border-zinc-600'
       }`}
       style={{ left: x, top: y }}
+      onMouseDown={(e) => e.preventDefault()} // Prevent losing selection
     >
       {/* Bold Option */}
       <button
-        onClick={() => onFormat('bold')}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.preventDefault();
+          onFormat('bold');
+        }}
         className={`w-full px-3 py-2 text-left rounded transition-colors text-sm flex items-center gap-2 ${
           theme === 'light'
             ? 'hover:bg-gray-100 text-gray-700'
@@ -52,7 +57,11 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, onFormat, onClose, them
 
       {/* Bullet List Option */}
       <button
-        onClick={() => onFormat('bulletList')}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.preventDefault();
+          onFormat('bulletList');
+        }}
         className={`w-full px-3 py-2 text-left rounded transition-colors text-sm flex items-center gap-2 ${
           theme === 'light'
             ? 'hover:bg-gray-100 text-gray-700'
@@ -76,8 +85,11 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, onFormat, onClose, them
         {colors.map((color) => (
           <button
             key={color.name}
-            onClick={() => onFormat('color')}
-            data-color={color.value}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.preventDefault();
+              onFormat('color', color.value);
+            }}
             className={`w-full px-3 py-2 text-left rounded transition-colors text-sm flex items-center gap-2 ${
               theme === 'light'
                 ? 'hover:bg-gray-100 text-gray-700'
@@ -159,6 +171,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // Prevent event from bubbling up to parent components
     
     const selection = window.getSelection();
     if (selection && selection.toString().trim()) {
@@ -170,60 +183,44 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     }
   };
 
-  const handleFormat = (type: 'bold' | 'color' | 'bulletList') => {
+  const handleFormat = (type: 'bold' | 'color' | 'bulletList', colorValue?: string) => {
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
+    if (!selection || selection.rangeCount === 0) {
+      setContextMenu({ show: false, x: 0, y: 0 });
+      return;
+    }
 
     const range = selection.getRangeAt(0);
     
-    if (type === 'bold') {
-      // Toggle bold formatting
-      const selectedContent = range.extractContents();
-      const span = document.createElement('strong');
-      span.appendChild(selectedContent);
-      range.insertNode(span);
-      
-      // Clear selection
-      selection.removeAllRanges();
-      
-    } else if (type === 'color') {
-      // Get color from button data attribute
-      const target = (document.activeElement as HTMLButtonElement);
-      const color = target?.getAttribute('data-color') || '';
-      
-      const selectedContent = range.extractContents();
-      const span = document.createElement('span');
-      if (color) {
-        span.style.color = color;
-      }
-      span.appendChild(selectedContent);
-      range.insertNode(span);
-      
-      // Clear selection
-      selection.removeAllRanges();
-      
-    } else if (type === 'bulletList') {
-      // Create bullet list
-      const selectedContent = range.extractContents();
-      const lines = selectedContent.textContent?.split('\n') || [selectedContent.textContent || ''];
-      
-      const ul = document.createElement('ul');
-      lines.forEach(line => {
-        if (line.trim()) {
-          const li = document.createElement('li');
-          li.textContent = line.trim();
-          ul.appendChild(li);
+    try {
+      if (type === 'bold') {
+        // Use document.execCommand for better compatibility
+        document.execCommand('bold', false);
+        
+      } else if (type === 'color') {
+        // Get color from the event or parameter
+        const color = colorValue || '';
+        if (color) {
+          document.execCommand('foreColor', false, color);
+        } else {
+          // Remove color formatting
+          document.execCommand('removeFormat', false);
         }
-      });
+        
+      } else if (type === 'bulletList') {
+        // Create bullet list using execCommand
+        document.execCommand('insertUnorderedList', false);
+      }
+
+      // Update content
+      setTimeout(() => {
+        handleInput();
+      }, 10);
       
-      range.insertNode(ul);
-      
-      // Clear selection
-      selection.removeAllRanges();
+    } catch (error) {
+      console.error('Formatting error:', error);
     }
 
-    // Update content
-    handleInput();
     setContextMenu({ show: false, x: 0, y: 0 });
   };
 
