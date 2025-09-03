@@ -30,7 +30,20 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
     storageKey: 'ef-supabase-auth-token',
-    flowType: 'pkce'
+    flowType: 'pkce',
+    // Additional stability settings for online environment
+    debug: process.env.NODE_ENV === 'development'
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'ef-admin@1.0.0'
+    }
+  },
+  // Enhanced connection settings for online stability
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
   }
 });
 
@@ -1252,9 +1265,9 @@ export const dbService = {
 
   async getCurrentUser() {
     try {
-      // Extended timeout for online stability
+      // Super extended timeout for maximum online stability
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Auth timeout')), 15000)
+        setTimeout(() => reject(new Error('Auth timeout')), 30000)
       );
       
       const sessionPromise = supabase.auth.getSession();
@@ -1266,8 +1279,10 @@ export const dbService = {
       
       if (error) {
         console.error('Session error:', error);
-        // Try to refresh session on error
+        
+        // Multiple retry attempts with different strategies
         try {
+          console.log('Attempting session refresh...');
           const { data: refreshedSession, error: refreshError } = await supabase.auth.refreshSession();
           if (!refreshError && refreshedSession?.user) {
             console.log('Session refreshed successfully');
@@ -1276,11 +1291,36 @@ export const dbService = {
         } catch (refreshErr) {
           console.error('Session refresh failed:', refreshErr);
         }
+        
+        // Try to get user from storage as fallback
+        try {
+          console.log('Attempting to get user from storage...');
+          const { data: { user }, error: userError } = await supabase.auth.getUser();
+          if (!userError && user) {
+            console.log('User retrieved from storage:', user.email);
+            return user;
+          }
+        } catch (storageErr) {
+          console.error('Storage user retrieval failed:', storageErr);
+        }
+        
         return null;
       }
       
       if (!session?.user) {
-        console.log('No active session found');
+        console.log('No active session found - checking storage fallback');
+        
+        // Fallback: try to get user from storage
+        try {
+          const { data: { user }, error: userError } = await supabase.auth.getUser();
+          if (!userError && user) {
+            console.log('User found in storage fallback:', user.email);
+            return user;
+          }
+        } catch (storageErr) {
+          console.error('Storage fallback failed:', storageErr);
+        }
+        
         return null;
       }
       
@@ -1288,6 +1328,19 @@ export const dbService = {
       return session.user;
     } catch (e) {
       console.error('getCurrentUser error:', e);
+      
+      // Last resort: try direct user retrieval
+      try {
+        console.log('Last resort: direct user retrieval...');
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (!error && user) {
+          console.log('Direct user retrieval successful:', user.email);
+          return user;
+        }
+      } catch (finalErr) {
+        console.error('Final user retrieval attempt failed:', finalErr);
+      }
+      
       return null;
     }
   },
@@ -1302,9 +1355,9 @@ export const dbService = {
 
       console.log('Fetching profile for user:', user.email);
       
-      // Extended timeout for database queries
+      // Super extended timeout for database queries in online environment
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Database timeout')), 15000)
+        setTimeout(() => reject(new Error('Database timeout')), 30000)
       );
       
       const profilePromise = supabase
@@ -1335,19 +1388,71 @@ export const dbService = {
           };
         }
         
+        // On timeout or network errors, try a simplified approach
+        if (error.message.includes('timeout') || error.message.includes('network')) {
+          console.log('Network/timeout error - using cached profile approach');
+          
+          // Check if we have a cached profile in localStorage
+          if (typeof window !== 'undefined') {
+            const cachedProfile = localStorage.getItem(`ef-profile-${user.id}`);
+            if (cachedProfile) {
+              try {
+                const parsed = JSON.parse(cachedProfile);
+                console.log('Using cached profile:', parsed);
+                return parsed;
+              } catch (parseErr) {
+                console.error('Failed to parse cached profile:', parseErr);
+              }
+            }
+          }
+          
+          // Return default profile if no cache
+          return {
+            id: user.id,
+            email: user.email || '',
+            status: 'approved' as const,
+            role: 'admin' as const,
+            full_name: user.email || 'Admin User',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+        }
+        
         return null;
       }
 
       console.log('Profile found:', data);
+      
+      // Cache the profile for offline resilience
+      if (typeof window !== 'undefined' && data) {
+        localStorage.setItem(`ef-profile-${user.id}`, JSON.stringify(data));
+      }
+      
       return data;
     } catch (e) {
       console.error('getCurrentUserProfile error:', e);
       
-      // Fallback: if there's an error, return a default admin profile
+      // Enhanced fallback with caching
       const user = await this.getCurrentUser();
       if (user) {
-        console.log('Using fallback admin profile for:', user.email);
-        return {
+        console.log('Using enhanced fallback profile for:', user.email);
+        
+        // Check cache first
+        if (typeof window !== 'undefined') {
+          const cachedProfile = localStorage.getItem(`ef-profile-${user.id}`);
+          if (cachedProfile) {
+            try {
+              const parsed = JSON.parse(cachedProfile);
+              console.log('Using cached fallback profile:', parsed);
+              return parsed;
+            } catch (parseErr) {
+              console.error('Failed to parse cached fallback profile:', parseErr);
+            }
+          }
+        }
+        
+        // Default fallback profile
+        const fallbackProfile = {
           id: user.id,
           email: user.email || '',
           status: 'approved' as const,
@@ -1356,6 +1461,13 @@ export const dbService = {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
+        
+        // Cache the fallback profile
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`ef-profile-${user.id}`, JSON.stringify(fallbackProfile));
+        }
+        
+        return fallbackProfile;
       }
       
       return null;

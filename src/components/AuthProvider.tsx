@@ -38,13 +38,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setMounted(true);
   }, []);
 
-  const checkAuth = async () => {
+  const checkAuth = async (retryCount = 0, maxRetries = 3) => {
     if (!mounted) return;
     
     try {
-      // Extended timeout to 30 seconds for online stability
+      // Increased timeout to 60 seconds for maximum online stability
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Auth check timeout')), 30000)
+        setTimeout(() => reject(new Error('Auth check timeout')), 60000)
       );
       
       const authPromise = (async () => {
@@ -54,6 +54,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const profile = await dbService.getCurrentUserProfile();
           setUser(authUser);
           setUserProfile(profile);
+          
+          // Store successful auth timestamp for heartbeat
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('ef-auth-last-success', Date.now().toString());
+            sessionStorage.setItem('ef-auth-backup', JSON.stringify({ 
+              userId: authUser.id, 
+              email: authUser.email,
+              timestamp: Date.now() 
+            }));
+          }
         } else {
           setUser(null);
           setUserProfile(null);
@@ -63,15 +73,39 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await Promise.race([authPromise, timeoutPromise]);
       
     } catch (error) {
-      console.error('Auth check failed:', error);
-      // Don't immediately logout on errors - could be temporary network issues
+      console.error(`Auth check failed (attempt ${retryCount + 1}/${maxRetries + 1}):`, error);
+      
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes('timeout')) {
-        console.warn('Auth check timeout - keeping existing session');
+      
+      // Retry on timeout or network errors
+      if ((errorMessage.includes('timeout') || errorMessage.includes('network') || errorMessage.includes('fetch')) && retryCount < maxRetries) {
+        console.warn(`Retrying auth check in ${(retryCount + 1) * 2} seconds...`);
+        setTimeout(() => {
+          checkAuth(retryCount + 1, maxRetries);
+        }, (retryCount + 1) * 2000);
         return;
       }
-      setUser(null);
-      setUserProfile(null);
+      
+      // Check if we have a backup session
+      if (typeof window !== 'undefined') {
+        const lastSuccess = localStorage.getItem('ef-auth-last-success');
+        const backupSession = sessionStorage.getItem('ef-auth-backup');
+        
+        if (lastSuccess && backupSession) {
+          const timeSinceSuccess = Date.now() - parseInt(lastSuccess);
+          // Keep session alive if last success was within 10 minutes
+          if (timeSinceSuccess < 10 * 60 * 1000) {
+            console.warn('Auth check failed but keeping session based on recent success');
+            return;
+          }
+        }
+      }
+      
+      // Only logout if we're sure the session is invalid
+      if (!errorMessage.includes('timeout') && !errorMessage.includes('network')) {
+        setUser(null);
+        setUserProfile(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -94,39 +128,96 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (!mounted) return;
 
-    // Force loading to false after 20 seconds max
+    // Force loading to false after 30 seconds max
     const maxLoadingTimeout = setTimeout(() => {
       setLoading(false);
-    }, 20000);
+    }, 30000);
 
     checkAuth().finally(() => {
       clearTimeout(maxLoadingTimeout);
     });
     
+    // Session heartbeat - check auth every 5 minutes to keep session alive
+    const heartbeatInterval = setInterval(() => {
+      if (user && typeof window !== 'undefined') {
+        const lastSuccess = localStorage.getItem('ef-auth-last-success');
+        if (lastSuccess) {
+          const timeSinceSuccess = Date.now() - parseInt(lastSuccess);
+          // Only do heartbeat check if it's been more than 4 minutes since last success
+          if (timeSinceSuccess > 4 * 60 * 1000) {
+            console.log('Performing session heartbeat...');
+            checkAuth(0, 1); // Single retry for heartbeat
+          }
+        }
+      }
+    }, 5 * 60 * 1000); // Every 5 minutes
+    
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: any, session: any) => {
         try {
+          console.log('Auth state change:', event, session?.user?.email);
+          
           if (event === 'SIGNED_IN' && session?.user) {
             const profile = await dbService.getCurrentUserProfile();
             setUser(session.user);
             setUserProfile(profile);
+            
+            // Update success timestamp
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('ef-auth-last-success', Date.now().toString());
+            }
           } else if (event === 'SIGNED_OUT') {
             setUser(null);
             setUserProfile(null);
+            
+            // Clear stored timestamps
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('ef-auth-last-success');
+              sessionStorage.removeItem('ef-auth-backup');
+            }
+          } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+            console.log('Token refreshed successfully');
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('ef-auth-last-success', Date.now().toString());
+            }
           }
         } catch (error) {
           console.error('Error handling auth state change:', error);
+          // Don't set loading false on auth state change errors
         }
         setLoading(false);
       }
     );
 
+    // Listen for network status changes
+    const handleOnline = () => {
+      console.log('Network online - checking auth status');
+      if (user) {
+        checkAuth(0, 1); // Quick auth check when coming back online
+      }
+    };
+    
+    const handleOffline = () => {
+      console.log('Network offline - preserving current auth state');
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+
     return () => {
       subscription.unsubscribe();
       clearTimeout(maxLoadingTimeout);
+      clearInterval(heartbeatInterval);
+      
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
     };
-  }, [mounted]);
+  }, [mounted, user]);
 
   const value = {
     user,
