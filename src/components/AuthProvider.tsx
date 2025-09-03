@@ -42,9 +42,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!mounted) return;
     
     try {
-      // Increased timeout to 15 seconds for better stability
+      // Extended timeout to 30 seconds for online stability
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Auth check timeout')), 15000)
+        setTimeout(() => reject(new Error('Auth check timeout')), 30000)
       );
       
       const authPromise = (async () => {
@@ -94,10 +94,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (!mounted) return;
 
-    // Force loading to false after 10 seconds max
+    // Force loading to false after 20 seconds max
     const maxLoadingTimeout = setTimeout(() => {
       setLoading(false);
-    }, 10000);
+    }, 20000);
 
     checkAuth().finally(() => {
       clearTimeout(maxLoadingTimeout);

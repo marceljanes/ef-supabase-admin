@@ -27,7 +27,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    storageKey: 'ef-supabase-auth-token',
+    flowType: 'pkce'
   }
 });
 
@@ -1249,9 +1252,9 @@ export const dbService = {
 
   async getCurrentUser() {
     try {
-      // Add timeout to prevent hanging
+      // Extended timeout for online stability
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Auth timeout')), 5000)
+        setTimeout(() => reject(new Error('Auth timeout')), 15000)
       );
       
       const sessionPromise = supabase.auth.getSession();
@@ -1263,6 +1266,16 @@ export const dbService = {
       
       if (error) {
         console.error('Session error:', error);
+        // Try to refresh session on error
+        try {
+          const { data: refreshedSession, error: refreshError } = await supabase.auth.refreshSession();
+          if (!refreshError && refreshedSession?.user) {
+            console.log('Session refreshed successfully');
+            return refreshedSession.user;
+          }
+        } catch (refreshErr) {
+          console.error('Session refresh failed:', refreshErr);
+        }
         return null;
       }
       
@@ -1289,9 +1302,9 @@ export const dbService = {
 
       console.log('Fetching profile for user:', user.email);
       
-      // Add timeout for database query
+      // Extended timeout for database queries
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Database timeout')), 8000)
+        setTimeout(() => reject(new Error('Database timeout')), 15000)
       );
       
       const profilePromise = supabase
