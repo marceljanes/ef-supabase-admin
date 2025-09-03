@@ -25,6 +25,7 @@ export default function InsertQuestionModal({ onClose }: Props) {
   ]);
   const addAnswer = () => { setAnswers(a => [...a, { text: '', isCorrect: false }]); };
   const removeAnswer = (idx:number) => { setAnswers(a => a.filter((_,i)=> i!==idx)); };
+  const [showJsonPreview, setShowJsonPreview] = useState(false);
 
   // Load exams that have categories (active or inactive)
   const loadExamsWithCategories = async () => {
@@ -67,6 +68,20 @@ export default function InsertQuestionModal({ onClose }: Props) {
   };
 
   const canSave = selectedExam && selectedCategory && questionText.trim() && explanation.trim() && answers.length>=2 && answers.every(a=>a.text.trim()) && answers.some(a=>a.isCorrect);
+
+  const generateJsonPreview = () => {
+    if (!selectedExam) return {};
+    return {
+      question: questionText.trim(),
+      answers,
+      explanation: explanation.trim(),
+      level,
+      category: selectedCategory,
+      exam_code: selectedExam.exam_code,
+      inactive: !selectedExam.is_active,
+      created_at: new Date().toISOString()
+    };
+  };
 
   const save = async () => {
     if (!canSave || !selectedExam) return;
@@ -178,12 +193,60 @@ export default function InsertQuestionModal({ onClose }: Props) {
         </div>
         <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-700 bg-zinc-950/40">
           <div className="text-xs text-zinc-400">All fields required. Only exams with at least one category are listed.</div>
-            <div className="space-x-2">
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={() => setShowJsonPreview(true)} 
+                className="p-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center"
+                title="Preview JSON"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M5 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h14v14H5V5zm2 2v2h2V7H7zm4 0v2h2V7h-2zm4 0v2h2V7h-2zM7 11v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zM7 15v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2z"/>
+                </svg>
+              </button>
               <button onClick={onClose} className="px-3 py-1.5 text-sm rounded bg-zinc-700 hover:bg-zinc-600 text-white">Cancel</button>
               <button disabled={!canSave || saving} onClick={save} className="px-4 py-1.5 text-sm rounded bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white">{saving ? 'Saving...' : 'Save Question'}</button>
             </div>
         </div>
       </div>
+      
+      {/* JSON Preview Modal */}
+      {showJsonPreview && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg w-full max-w-2xl max-h-[80vh] shadow-xl flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-700">
+              <h3 className="text-lg font-medium text-white">JSON Preview</h3>
+              <button 
+                onClick={() => setShowJsonPreview(false)} 
+                className="text-zinc-400 hover:text-zinc-200 text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              <pre className="bg-zinc-800 border border-zinc-600 rounded p-4 text-sm text-zinc-200 overflow-auto whitespace-pre-wrap">
+                {JSON.stringify(generateJsonPreview(), null, 2)}
+              </pre>
+            </div>
+            <div className="flex justify-end px-6 py-4 border-t border-zinc-700 bg-zinc-950/40">
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(generateJsonPreview(), null, 2));
+                  // You could add a toast notification here
+                }} 
+                className="px-3 py-1.5 text-sm rounded bg-blue-600 hover:bg-blue-500 text-white mr-2"
+              >
+                Copy JSON
+              </button>
+              <button 
+                onClick={() => setShowJsonPreview(false)} 
+                className="px-3 py-1.5 text-sm rounded bg-zinc-700 hover:bg-zinc-600 text-white"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
