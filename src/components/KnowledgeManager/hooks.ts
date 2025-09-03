@@ -693,10 +693,20 @@ export const useKnowledgeManager = () => {
     }));
   };
 
-  const insertChunkBetween = async (knowledgeId: number, insertAfterOrder: number, chunkType: 'text' | 'graphic' = 'text') => {
+  const insertChunkBetween = async (knowledgeId: number, insertAfterOrder: number, chunkType: 'text' | 'image' = 'text') => {
     try {
-      if (chunkType === 'graphic') {
-        await createGraphicChunk(knowledgeId, insertAfterOrder);
+      if (chunkType === 'image') {
+        // Trigger file selection for image chunk
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.onchange = (e) => {
+          const file = (e.target as HTMLInputElement).files?.[0];
+          if (file) {
+            createImageChunk(knowledgeId, file, insertAfterOrder);
+          }
+        };
+        fileInput.click();
       } else {
         // For text chunks, we need to set up the form first
         setState(prev => ({
@@ -712,52 +722,6 @@ export const useKnowledgeManager = () => {
         // The actual creation will happen when user submits the form
         // We'll pass the insertAfterOrder to createChunk
       }
-    } catch (err: any) {
-      setState(prev => ({ ...prev, error: err.message }));
-    }
-  };
-
-  const createGraphicChunk = async (knowledgeId: number, insertAfterOrder?: number) => {
-    try {
-      let nextOrder: number;
-      
-      if (insertAfterOrder !== undefined && insertAfterOrder !== null) {
-        // Insert between chunks - shift all following chunks by +100
-        const chunksToShift = state.chunks.filter(c => c.chunk_order > insertAfterOrder);
-        
-        // Update all following chunks first
-        for (const chunk of chunksToShift) {
-          await dbService.updateKnowledgeChunk(chunk.id!, {
-            chunk_order: chunk.chunk_order + 100
-          });
-        }
-        
-        nextOrder = insertAfterOrder + 100;
-        console.log('Creating graphic chunk between chunks. Insert after:', insertAfterOrder, 'New order:', nextOrder);
-      } else {
-        // Append at end - use 100er steps
-        const maxOrder = state.chunks.length > 0 ? Math.max(...state.chunks.map(c => c.chunk_order)) : 0;
-        nextOrder = Math.ceil((maxOrder + 100) / 100) * 100; // Round up to next 100
-        console.log('Creating graphic chunk at end with order:', nextOrder, 'Current max order:', maxOrder);
-      }
-
-      // Create a default graphic content
-      const defaultGraphicContent = {
-        type: 'graphic',
-        graphic: {
-          shapes: []
-        }
-      };
-
-      await dbService.createKnowledgeChunk({
-        knowledge_id: knowledgeId,
-        title: 'Neue Grafik',
-        content: JSON.stringify(defaultGraphicContent),
-        chunk_type: 'graphic',
-        chunk_order: nextOrder
-      });
-      
-      await loadKnowledgeDetail(knowledgeId);
     } catch (err: any) {
       setState(prev => ({ ...prev, error: err.message }));
     }
@@ -865,7 +829,6 @@ export const useKnowledgeManager = () => {
     updateChunk,
     updateChunkDirect,
     createChunkDirect,
-    createGraphicChunk,
     createImageChunk,
     insertChunkBetween,
     renumberToHundreds,
