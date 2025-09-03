@@ -85,6 +85,8 @@ export default function InsertQuestionModal({ onClose }: Props) {
   }, [exams.length]);
 
   const filteredExams = exams.filter(ex => {
+    // Only show active exams
+    if (!ex.is_active) return false;
     if (vendorFilter && ex.vendor !== vendorFilter) return false;
     if (examSearch && !(`${ex.exam_code} ${ex.exam_name}`.toLowerCase().includes(examSearch.toLowerCase()))) return false;
     if (globalCategoryFilter) {
