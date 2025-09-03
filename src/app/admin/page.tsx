@@ -510,7 +510,21 @@ export default function AdminDashboard() {
                     {recentCreated.length===0 && <li className="p-3 text-zinc-500 text-xs">No recent creations.</li>}
                     {recentCreated.map(q=> {
                       const hasCreated = !!q.created_at && !isNaN(Date.parse(q.created_at));
-                      const dateLabel = hasCreated ? new Date(q.created_at).toLocaleString() : '—';
+                      
+                      // Format date to show "today" if created today
+                      let dateLabel = '—';
+                      if (hasCreated) {
+                        const createdDate = new Date(q.created_at);
+                        const today = new Date();
+                        const isToday = createdDate.toDateString() === today.toDateString();
+                        
+                        if (isToday) {
+                          dateLabel = `today ${createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                        } else {
+                          dateLabel = createdDate.toLocaleString();
+                        }
+                      }
+                      
                       return (
                       <li key={q.id} onClick={()=>openRecentQuestion(q)} className="p-3 flex flex-col gap-1 hover:bg-zinc-800/50 cursor-pointer group">
                         <div className="flex items-center gap-2">
