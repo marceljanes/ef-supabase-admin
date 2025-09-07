@@ -526,18 +526,55 @@ export const dbService = {
     }
   },
 
-  // New: fetch exam_pages
+  // New: fetch exam_pages with question counts
   async getExamPages() {
     try {
-      console.log('Fetching exam_pages...');
-      const { data, error } = await supabase
+      console.log('Fetching exam_pages with question counts...');
+      
+      // First, get all exam pages
+      const { data: examPages, error: examError } = await supabase
         .from('exam_pages')
         .select('*')
         .order('display_order', { ascending: true })
         .order('exam_code', { ascending: true });
-      if (error) throw new Error(`Error fetching exam_pages: ${error.message}`);
-      console.log(`Fetched ${data?.length || 0} exam_pages`);
-      return data || [];
+        
+      if (examError) throw new Error(`Error fetching exam_pages: ${examError.message}`);
+      
+      if (!examPages || examPages.length === 0) {
+        return [];
+      }
+      
+      // Get question counts for each exam code
+      const examCodes = examPages.map(ep => ep.exam_code);
+      
+      // Query question counts grouped by exam_code
+      const { data: questionCounts, error: countError } = await supabase
+        .from('questions')
+        .select('exam_code')
+        .in('exam_code', examCodes);
+        
+      if (countError) {
+        console.error('Error fetching question counts:', countError);
+        // Return exam pages with 0 counts if question count query fails
+        return examPages.map(ep => ({ ...ep, question_count: 0 }));
+      }
+      
+      // Count questions per exam code
+      const countMap: { [key: string]: number } = {};
+      (questionCounts || []).forEach(q => {
+        countMap[q.exam_code] = (countMap[q.exam_code] || 0) + 1;
+      });
+      
+      // Merge question counts with exam pages
+      const examPagesWithCounts = examPages.map(ep => ({
+        ...ep,
+        question_count: countMap[ep.exam_code] || 0
+      }));
+      
+      console.log(`Fetched ${examPagesWithCounts.length} exam_pages with question counts`);
+      console.log('Question count summary:', countMap);
+      
+      return examPagesWithCounts;
     } catch (error) {
       console.error('getExamPages error:', error);
       throw error;
